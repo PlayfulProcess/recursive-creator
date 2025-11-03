@@ -43,9 +43,9 @@ Unified dashboard for all Recursive.eco content
 **Why:** 3-4 days of auth work saves weeks of frustration and refactoring
 **What:** Dual auth (magic link + OTP) in one email
 
-### 2. Relational Schema (Not JSONB-heavy)
-**Why:** Easier to query, navigate, and maintain
-**What:** Proper columns for structure, JSONB only for flexible metadata
+### 2. Full JSONB Schema (Not Relational)
+**Why:** Solo dev speed, AI integration, small scale (200 users), no migrations
+**What:** 3 simple tables with JSONB data columns (same pattern as existing projects)
 
 ### 3. New Project (Not Adding to Channels)
 **Why:** Clean architecture, minimal refactoring, clear separation

@@ -1,6 +1,16 @@
-# Supabase Schema: Relational Design (Revised)
+# Supabase Schema: Relational Design (Reference Only - NOT CHOSEN)
 
-> Moving away from JSONB hell to clean, queryable relational structure
+> **⚠️ NOTE:** This document presents the relational approach we considered but **did NOT choose**.
+>
+> **Chosen approach:** Full JSONB (see `SIMPLE_JSONB_SCHEMA.md`)
+>
+> **Why we chose JSONB:** Solo dev speed, AI integration, small scale (200 users), no migration overhead.
+>
+> **This document kept as:** Reference for understanding trade-offs between relational vs JSONB approaches.
+
+---
+
+## Why Relational > JSONB (In Theory)
 
 ---
 

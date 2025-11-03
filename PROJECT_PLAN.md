@@ -156,154 +156,137 @@ export function StoryViewer({ story }) {
 
 ## Data Model (Supabase)
 
-### ✅ Relational Design (Not JSONB-heavy)
+### ✅ Full JSONB Design (Simple & Fast)
 
-**Design Decision:** Use proper relational structure with columns for core fields, JSONB only for truly flexible metadata.
+**Design Decision:** Use JSONB-heavy approach for solo dev speed and AI integration.
 
-**See:** `SUPABASE_SCHEMA_REVISED.md` for detailed rationale and comparison with JSONB-heavy approach.
+**Rationale:**
+- **Small scale** (200 users max) → JSONB is plenty fast
+- **Solo developer** → Speed of iteration > perfect structure
+- **Infrequent querying** → Don't need optimization
+- **AI-friendly** → JSON is native format for LLMs, embeddings, semantic search
+- **No migrations** → Change structure anytime without ceremony
+- **Claude builds visualizations** → Custom dashboards > Supabase Studio
+- **Same pattern as existing projects** → Consistency with channels/journal
 
-### Stories Schema
+**See:** `SIMPLE_JSONB_SCHEMA.md` for complete schema and examples.
+
+### Complete Schema (3 Tables)
 
 ```sql
--- Main story metadata (relational design)
+-- Stories (everything in JSONB)
 CREATE TABLE stories (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   slug TEXT UNIQUE NOT NULL,
-
-  -- Core searchable fields (NOT jsonb!)
-  title TEXT NOT NULL,
-  subtitle TEXT,
-  author TEXT,
-  cover_image_url TEXT,
-
-  -- Status fields (NOT jsonb!)
-  visibility TEXT NOT NULL DEFAULT 'private' CHECK (visibility IN ('private', 'unlisted', 'public')),
-  published BOOLEAN DEFAULT false,
-
-  -- Relationships (NOT jsonb!)
-  creator_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  channel_id UUID REFERENCES channels(id),
-
-  -- Timestamps
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  published_at TIMESTAMPTZ,
-
-  -- Optional flexible metadata (OK to use JSONB here)
-  metadata JSONB DEFAULT '{}'::jsonb
-  -- Examples: reading_level, age_range, themes, custom_tags
+  story_data JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Story pages (relational, not nested in JSONB)
+-- Indexes for common JSONB queries
+CREATE INDEX idx_stories_creator ON stories ((story_data->>'creator_id'));
+CREATE INDEX idx_stories_visibility ON stories ((story_data->>'visibility'));
+
+-- Story pages (minimal structure)
 CREATE TABLE story_pages (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  story_id UUID NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
-
-  -- Page data (NOT jsonb!)
-  image_url TEXT NOT NULL,
+  story_id UUID REFERENCES stories(id) ON DELETE CASCADE,
   page_number INTEGER NOT NULL,
-  alt_text TEXT, -- For accessibility
-  narration_text TEXT, -- Optional read-aloud text
-
+  page_data JSONB DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW(),
-
   UNIQUE(story_id, page_number)
 );
 
--- Indexes for common queries
-CREATE INDEX idx_stories_creator_id ON stories(creator_id);
-CREATE INDEX idx_stories_visibility ON stories(visibility) WHERE published = true;
-CREATE INDEX idx_stories_published_at ON stories(published_at DESC) WHERE published = true;
-CREATE INDEX idx_story_pages_story_id ON story_pages(story_id);
-```
-
-### Playlists Schema
-
-```sql
--- Main playlist metadata (relational design)
+-- Playlists (everything in JSONB)
 CREATE TABLE playlists (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   slug TEXT UNIQUE NOT NULL,
-
-  -- Core fields (NOT jsonb!)
-  title TEXT NOT NULL,
-  description TEXT,
-  cover_url TEXT,
-
-  -- Status fields (NOT jsonb!)
-  visibility TEXT NOT NULL DEFAULT 'private' CHECK (visibility IN ('private', 'unlisted', 'public')),
-  published BOOLEAN DEFAULT false,
-  moderation_status TEXT DEFAULT 'pending' CHECK (moderation_status IN ('pending', 'approved', 'rejected')),
-
-  -- Relationships (NOT jsonb!)
-  creator_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  channel_id UUID REFERENCES channels(id),
-
-  -- Timestamps
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  published_at TIMESTAMPTZ,
-
-  -- Optional metadata JSONB (themes, age_range, etc.)
-  metadata JSONB DEFAULT '{}'::jsonb
+  playlist_data JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Playlist items (relational)
-CREATE TABLE playlist_items (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  playlist_id UUID NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
-
-  -- Video data (NOT jsonb!)
-  video_provider TEXT DEFAULT 'youtube',
-  video_id TEXT NOT NULL,
-  title TEXT, -- Cached from provider API
-  thumbnail_url TEXT, -- Cached
-  duration_seconds INTEGER, -- Cached
-
-  -- Ordering (NOT jsonb!)
-  position INTEGER NOT NULL,
-
-  -- Optional parent notes
-  notes TEXT,
-
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-
-  UNIQUE(playlist_id, position)
-);
-
--- Indexes
-CREATE INDEX idx_playlists_creator_id ON playlists(creator_id);
-CREATE INDEX idx_playlists_visibility ON playlists(visibility) WHERE published = true;
-CREATE INDEX idx_playlist_items_playlist_id ON playlist_items(playlist_id);
+CREATE INDEX idx_playlists_creator ON playlists ((playlist_data->>'creator_id'));
 ```
 
-### Row Level Security Policies
+### JSONB Structure Examples
+
+**story_data:**
+```json
+{
+  "title": "Bunny Finds Courage",
+  "subtitle": "A tale of bravery",
+  "author": "PlayfulProcess",
+  "cover_image_url": "/stories/bunny/cover.jpg",
+  "visibility": "private",
+  "published": false,
+  "creator_id": "user-uuid-here",
+  "metadata": {
+    "themes": ["courage", "kindness"],
+    "reading_level": "early-reader",
+    "age_range": "3-6"
+  }
+}
+```
+
+**page_data:**
+```json
+{
+  "image_url": "/stories/bunny/page-1.jpg",
+  "alt_text": "Bunny sitting under a tree",
+  "narration": "Once upon a time, there was a brave little bunny..."
+}
+```
+
+**playlist_data:**
+```json
+{
+  "title": "Calming Bedtime Videos",
+  "description": "Gentle videos for winding down",
+  "cover_url": "/playlists/bedtime/cover.jpg",
+  "visibility": "public",
+  "published": true,
+  "creator_id": "user-uuid-here",
+  "items": [
+    {
+      "position": 1,
+      "video_provider": "youtube",
+      "video_id": "abc123",
+      "title": "Gentle Rain Sounds",
+      "notes": "10 minutes of calming rain"
+    }
+  ]
+}
+```
+
+### Row Level Security (RLS)
 
 ```sql
--- Stories: Public can read public stories, owners can do everything with their stories
+-- Stories: Public can read public stories, owners can do everything
 ALTER TABLE stories ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Anyone can view public published stories"
   ON stories FOR SELECT
-  USING (visibility = 'public' AND published = true);
+  USING (
+    story_data->>'visibility' = 'public'
+    AND story_data->>'published' = 'true'
+  );
 
 CREATE POLICY "Users can view their own stories"
   ON stories FOR SELECT
-  USING (auth.uid() = creator_id);
+  USING (story_data->>'creator_id' = auth.uid()::text);
 
 CREATE POLICY "Users can create stories"
   ON stories FOR INSERT
-  WITH CHECK (auth.uid() = creator_id);
+  WITH CHECK (story_data->>'creator_id' = auth.uid()::text);
 
 CREATE POLICY "Users can update their own stories"
   ON stories FOR UPDATE
-  USING (auth.uid() = creator_id);
+  USING (story_data->>'creator_id' = auth.uid()::text);
 
 CREATE POLICY "Users can delete their own stories"
   ON stories FOR DELETE
-  USING (auth.uid() = creator_id);
+  USING (story_data->>'creator_id' = auth.uid()::text);
 
--- Story pages follow story permissions
+-- Story pages follow parent story
 ALTER TABLE story_pages ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Story pages visible to story viewers"
@@ -313,8 +296,8 @@ CREATE POLICY "Story pages visible to story viewers"
       SELECT 1 FROM stories
       WHERE stories.id = story_pages.story_id
       AND (
-        (stories.visibility = 'public' AND stories.published = true)
-        OR stories.creator_id = auth.uid()
+        (story_data->>'visibility' = 'public' AND story_data->>'published' = 'true')
+        OR story_data->>'creator_id' = auth.uid()::text
       )
     )
   );
@@ -325,11 +308,11 @@ CREATE POLICY "Users can manage their story pages"
     EXISTS (
       SELECT 1 FROM stories
       WHERE stories.id = story_pages.story_id
-      AND stories.creator_id = auth.uid()
+      AND story_data->>'creator_id' = auth.uid()::text
     )
   );
 
--- Similar policies for playlists and playlist_items (omitted for brevity)
+-- Similar policies for playlists (same pattern)
 ```
 
 ### Storage Buckets
@@ -356,22 +339,23 @@ CREATE POLICY "Users can delete their own images" ON storage.objects
   );
 ```
 
-### Why Relational > JSONB
+### Why JSONB for This Project
 
-**Benefits:**
-- ✅ Clear schema visible in Supabase Studio
-- ✅ Easy queries: `WHERE creator_id = ?` instead of `WHERE tool_data->>'creator_id' = ?`
-- ✅ Foreign key constraints enforce data integrity
-- ✅ Natural joins between tables
-- ✅ Supabase AI understands structure
-- ✅ Migrations are trackable
+**Advantages:**
+- ✅ **Zero migration overhead** - Change structure in app code, not SQL
+- ✅ **AI integration** - JSON is native format for Claude, GPT, embeddings
+- ✅ **Fast iteration** - Ship features without planning schema
+- ✅ **Good enough queries** - JSONB operators work fine at small scale
+- ✅ **Solo dev friendly** - Low cognitive overhead
+- ✅ **Custom dashboards** - Claude builds better viz than Studio
+- ✅ **Proven pattern** - Same as existing channels/journal projects
 
-**When to use JSONB:**
-- ✅ Truly flexible metadata (themes, tags)
-- ✅ User preferences (changes per user)
-- ✅ Settings objects (app configuration)
+**When to add structure:**
+- Only if hitting performance issues (won't at 200 users)
+- Only if queries become complex (rare with our use case)
+- Probably never for this project
 
-**See `SUPABASE_SCHEMA_REVISED.md` for detailed comparison and rationale.**
+**See `SOLO_DEV_DATABASE_GUIDE.md` for detailed analysis and comparison.**
 
 ---
 
