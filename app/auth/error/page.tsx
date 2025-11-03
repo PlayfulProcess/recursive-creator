@@ -5,14 +5,17 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase-client';
 
 function AuthErrorContent() {
-  const [email, setEmail] = useState('');
+  const searchParams = useSearchParams();
+  const emailFromUrl = searchParams.get('email') || '';
+  const error = searchParams.get('error');
+
+  const [email, setEmail] = useState(emailFromUrl);
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
-  const [showOtpInput, setShowOtpInput] = useState(false);
+  // Auto-show OTP input if we have an email from failed magic link
+  const [showOtpInput, setShowOtpInput] = useState(!!emailFromUrl);
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const error = searchParams.get('error');
 
   const supabase = createClient();
 
@@ -79,6 +82,14 @@ function AuthErrorContent() {
               </a>
             </div>
           ) : (
+            <>
+              {emailFromUrl && (
+                <div className="mb-4 p-3 bg-blue-900/30 border border-blue-700 rounded-lg">
+                  <p className="text-sm text-blue-200">
+                    The magic link didn't work, but you can enter the 6-digit code from your email instead.
+                  </p>
+                </div>
+              )}
             <form onSubmit={handleVerifyOTP} className="space-y-4">
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-1 text-left">
@@ -91,9 +102,12 @@ function AuthErrorContent() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
                   required
-                  disabled={loading}
+                  disabled={loading || !!emailFromUrl}
                   className="w-full px-4 py-2 bg-gray-700 border border-gray-600 text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 placeholder-gray-500"
                 />
+                {emailFromUrl && (
+                  <p className="text-xs text-gray-500 mt-1">Email pre-filled from your login attempt</p>
+                )}
               </div>
 
               <div>
@@ -155,6 +169,7 @@ function AuthErrorContent() {
                 </a>
               </div>
             </form>
+            </>
           )}
 
           {error && (
