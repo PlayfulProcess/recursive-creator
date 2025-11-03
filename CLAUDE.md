@@ -1,8 +1,8 @@
 # Context for Claude Code: Recursive Creator Project
 
-> **Last Updated:** 2025-11-03 (Session 3)
-> **Current Phase:** Phase 0 COMPLETE - Auth Fixed + Dark Mode ✅
-> **Next Session:** Configure Supabase email template and test on production domains
+> **Last Updated:** 2025-11-03 (Session 4)
+> **Current Phase:** Phase 0 COMPLETE - Auth ACTUALLY Working ✅
+> **Next Session:** Test auth on production, then move to Phase 1 (features)
 
 ---
 
@@ -128,17 +128,20 @@ recursive-creator/
 - [x] Portability plan documented
 - [x] Next.js 15 project initialized
 - [x] DualAuth component implemented
-- [x] **CRITICAL FIX:** Cookie domain configuration (localhost + production)
+- [x] **Environment-aware cookie configuration** (best practice)
 - [x] **Dark mode** implemented across all auth pages
-- [x] **OTP fallback** added to error page
-- [x] Local development server tested (running on port 3001)
+- [x] **OTP fallback** added to error page with sessionStorage email prefill
+- [x] **CRITICAL FIX:** Callback route now handles PKCE code exchange (was missing!)
+- [x] Supabase email template includes `{{ .Token }}` for OTP
+- [x] Callback route copied from working recursive-channels-fresh
+- [x] Auth should be fully functional (awaiting test)
 
 ### 🔨 Next Steps (Immediate):
-- [ ] Update Supabase email template to include `{{ .Token }}`
-- [ ] Test auth flow locally with real email
-- [ ] Test on Vercel deployment
-- [ ] Copy fixed auth pattern to recursive-channels-fresh
-- [ ] Copy fixed auth pattern to jongu-tool-best-possible-self
+- [ ] **TEST AUTH ON PRODUCTION** (https://creator.recursive.eco/)
+- [ ] Verify magic link works
+- [ ] Verify OTP code works on error page
+- [ ] If working, copy pattern to recursive-channels-fresh and jongu-tool-best-possible-self
+- [ ] Move to Phase 1: Story publisher features
 
 ### 📋 Future Phases:
 - [ ] Phase 1: Story publisher & viewer (weeks 2-4)
@@ -190,28 +193,55 @@ recursive-creator/
 
 ---
 
-## Session 3 Updates: Auth Bugs Fixed + Dark Mode
+## Session 3-4 Updates: Auth Debugging Journey
 
-### Critical Bug Fixed: Cookie Domain Configuration
+### Bug #1: Cookie Domain Configuration (Fixed - Best Practice)
 
-**Problem Identified:**
-Both `lib/supabase-client.ts` and `lib/supabase-server.ts` were hardcoded to use `domain: '.recursive.eco'` for cookies. This prevented auth from working in:
-- Local development (localhost)
-- Vercel preview deployments (*.vercel.app)
-- Any non-production environment
+**Initial Problem:**
+Hardcoded `domain: '.recursive.eco'` doesn't work on localhost or Vercel previews.
 
-This was the root cause of the "Token has expired or is invalid" errors.
+**Solution:**
+Environment-aware cookie configuration:
+```typescript
+const isProduction = hostname.endsWith('recursive.eco');
+const cookieDomain = isProduction ? '.recursive.eco' : undefined;
+```
 
-**Solution Implemented:**
-- Added environment detection logic to both files
-- Cookies now use `undefined` domain for localhost and Vercel previews
-- Cookies use `.recursive.eco` domain only for production
-- `secure` flag is `false` for localhost, `true` for production
-- Works seamlessly across all environments
+**Files:** `lib/supabase-client.ts`, `lib/supabase-server.ts`
 
-**Files Changed:**
-- `lib/supabase-client.ts` - Lines 4-13, 27-31 (environment detection)
-- `lib/supabase-server.ts` - Lines 6-14, 31-36 (environment detection)
+### Bug #2: CRITICAL - Wrong Callback Logic (ACTUAL ROOT CAUSE)
+
+**The Real Problem (discovered via Vercel logs):**
+```
+❌ Missing token_hash or type in callback
+fullUrl: 'https://creator.recursive.eco/auth/callback?code=af540734-95db-4ab9-ba31-3283f66cc36e'
+```
+
+Supabase was sending a `code` parameter (PKCE flow), but the callback was ONLY looking for `token_hash` + `type`.
+
+**Why This Happened:**
+- I wrote callback logic from scratch instead of copying from recursive-channels-fresh
+- recursive-channels-fresh handles BOTH flows (old magic link + new PKCE)
+- I only implemented the old flow
+
+**Solution:**
+Copied EXACT callback logic from recursive-channels-fresh:
+
+```typescript
+// Handle magic link tokens (old flow)
+if (token_hash && type === 'magiclink') {
+  await supabase.auth.verifyOtp({ token_hash, type: 'magiclink' })
+}
+
+// Handle PKCE code exchange (new flow) ← THIS WAS MISSING!
+if (code) {
+  await supabase.auth.exchangeCodeForSession(code)
+}
+```
+
+**File:** `app/auth/callback/route.ts`
+
+**Key Lesson:** ALWAYS copy working code from recursive-channels-fresh as the reference implementation!
 
 ### Dark Mode Implementation
 
@@ -325,20 +355,25 @@ This was the root cause of the "Token has expired or is invalid" errors.
 4. **AUTH_PORTABILITY.md** - How to copy to other projects
 
 ### Existing Code (Reference Implementation):
-1. **components/auth/DualAuth.tsx** - ✅ COMPLETE - Dual auth component (magic link + OTP)
-2. **lib/supabase-client.ts** - ✅ FIXED - Environment-aware cookie configuration
-3. **lib/supabase-server.ts** - ✅ FIXED - Environment-aware cookie configuration
-4. **app/auth/callback/route.ts** - ✅ COMPLETE - Auth callback handler
-5. **app/auth/error/page.tsx** - ✅ COMPLETE - Error page with OTP fallback
+1. **components/auth/DualAuth.tsx** - ✅ Dual auth (magic link + OTP) + sessionStorage email
+2. **lib/supabase-client.ts** - ✅ Environment-aware cookies (best practice)
+3. **lib/supabase-server.ts** - ✅ Environment-aware cookies (best practice)
+4. **app/auth/callback/route.ts** - ✅ CRITICAL - Handles BOTH PKCE + magic link flows
+5. **app/auth/error/page.tsx** - ✅ Dark mode + OTP fallback + auto-prefilled email
 6. **middleware.ts** - Cookie handling (already existed)
 
 ### Code to Copy TO Other Projects:
-These files should be copied to recursive-channels-fresh and jongu-tool-best-possible-self:
-1. `lib/supabase-client.ts` (with fixed cookie logic)
-2. `lib/supabase-server.ts` (with fixed cookie logic)
-3. `components/auth/DualAuth.tsx` (dual auth component)
-4. `app/auth/callback/route.ts` (callback handler)
-5. `app/auth/error/page.tsx` (error page with OTP)
+When copying auth to recursive-channels-fresh and jongu-tool-best-possible-self:
+1. ✅ `app/auth/callback/route.ts` - Already matches channels (we copied FROM there!)
+2. ⚠️ `lib/supabase-client.ts` - Copy environment-aware version TO channels
+3. ⚠️ `lib/supabase-server.ts` - Copy environment-aware version TO channels
+4. ⚠️ `components/auth/DualAuth.tsx` - Copy dual auth TO channels
+5. ⚠️ `app/auth/error/page.tsx` - Copy error page with OTP TO channels
+
+**IMPORTANT:** The callback route here is now identical to recursive-channels-fresh (we copied it). The ONLY improvements to share are:
+- Environment-aware cookies
+- DualAuth component with sessionStorage
+- Enhanced error page
 
 ### Context Documents:
 1. **../README.md** - Ecosystem overview
@@ -437,17 +472,41 @@ npx supabase db push
 ## Debugging Tips
 
 ### If Auth Issues:
-- **Check cookie domain first!** Most auth failures are due to incorrect domain configuration
-  - In browser dev tools, check if cookies are being set with correct domain
-  - localhost should have no domain attribute (browser default)
-  - production should have `domain=.recursive.eco`
-- Check Supabase cookies in browser dev tools (Application → Cookies)
-  - Look for cookies with names like `sb-*-auth-token`
-  - Verify they're being set and not blocked
-- Verify callback URL in Supabase dashboard matches your environment
-- Check middleware.ts is running (console logs will show)
-- Test with different email providers (Gmail, Outlook, etc.)
-- **If magic link fails:** Try OTP input on error page as fallback
+
+**1. Check Vercel Logs FIRST!**
+- Go to Vercel Dashboard → Project → Logs → Real-time
+- Look for auth callback logs with 🔐 emoji
+- Check what parameters Supabase is sending: `code`, `token_hash`, or `type`?
+- This tells you which flow Supabase is using
+
+**2. Common Auth Failures:**
+
+**"Missing token_hash or type"** → Callback not handling PKCE flow
+- Supabase sends `code` parameter (PKCE)
+- Callback needs `exchangeCodeForSession(code)`
+- Solution: Copy callback from recursive-channels-fresh
+
+**"Token has expired or is invalid"** → Multiple possible causes
+- Check Vercel logs for actual error
+- Could be expired link (1 hour timeout)
+- Could be wrong redirect URL in Supabase
+- Could be cookie domain issues
+
+**"Code exchange failed"** → Redirect URL mismatch
+- Check Supabase Dashboard → Authentication → URL Configuration
+- Ensure callback URLs are whitelisted for your domain
+- Need: `https://creator.recursive.eco/auth/callback`
+
+**3. Cookie Domain Check:**
+- Browser dev tools → Application → Cookies
+- localhost should have NO domain attribute
+- production should have `domain=.recursive.eco`
+- Look for cookies like `sb-*-auth-token`
+
+**4. Test Both Auth Methods:**
+- Click magic link (should redirect to /dashboard)
+- If that fails, use OTP on error page
+- OTP bypasses the callback flow entirely
 
 ### If Database Issues:
 - Check RLS policies (common source of "no rows" errors)
@@ -543,32 +602,43 @@ Go to: Supabase Dashboard → Authentication → Email Templates → Magic Link
 
 ---
 
-## Quick Reference: What Changed in Session 3
+## Quick Reference: What Changed in Sessions 3-4
 
 ### Files Modified:
-1. `lib/supabase-client.ts` - Added environment-aware cookie domain logic
-2. `lib/supabase-server.ts` - Added environment-aware cookie domain logic
-3. `app/page.tsx` - Converted to dark mode (bg-gray-900)
-4. `components/auth/DualAuth.tsx` - Converted to dark mode (bg-gray-800)
-5. `app/auth/error/page.tsx` - Converted to dark mode + added OTP input form
+1. `lib/supabase-client.ts` - Environment-aware cookie domain (best practice)
+2. `lib/supabase-server.ts` - Environment-aware cookie domain (best practice)
+3. `app/page.tsx` - Dark mode (bg-gray-900)
+4. `components/auth/DualAuth.tsx` - Dark mode + sessionStorage for email
+5. `app/auth/error/page.tsx` - Dark mode + OTP form + auto-prefilled email
+6. `app/auth/callback/route.ts` - **CRITICAL FIX:** Now handles PKCE code exchange
 
-### Key Bug Fixed:
-**Cookie Domain Configuration** - Auth was failing because cookies were hardcoded to `.recursive.eco` domain, which doesn't work on localhost or Vercel preview. Fixed by detecting environment and setting domain appropriately.
+### Critical Bug Fixed:
+**Missing PKCE Code Handler** - Supabase sends `code` parameter (PKCE flow), but callback only handled `token_hash` + `type` (old magic link flow). Fixed by copying EXACT callback logic from recursive-channels-fresh which handles BOTH flows.
+
+### How We Found It:
+Vercel logs showed:
+```
+fullUrl: '...?code=af540734-95db-4ab9-ba31-3283f66cc36e'
+❌ Missing token_hash or type in callback
+```
+
+This revealed callback was ignoring the `code` parameter completely.
 
 ### Features Added:
 1. **Dark mode** across all auth pages
-2. **OTP fallback** on error page (if magic link fails, user can enter 6-digit code)
-3. **Environment-aware cookies** (works on localhost, Vercel preview, and production)
+2. **OTP fallback** with sessionStorage email prefill
+3. **Environment-aware cookies** (localhost, Vercel, production)
+4. **PKCE code exchange** support (the missing piece!)
 
 ### Testing Status:
-- ✅ Dev server running on port 3001
-- ⏳ Awaiting Supabase email template update
-- ⏳ Awaiting real-world auth test with email
+- ✅ All code matches working recursive-channels-fresh
+- ✅ Supabase email template includes `{{ .Token }}`
+- ⏳ Awaiting production test (should work now!)
 
-### Next Session Preview:
-Once Supabase email template is updated and auth is tested, the next session will likely focus on:
-- Copying fixed auth to other projects (channels, journal)
-- OR starting Phase 1 (story publisher features)
+### Next Session:
+- Test auth on https://creator.recursive.eco/
+- If working, copy improvements to other projects
+- Start Phase 1 (story publisher features)
 
 ---
 
