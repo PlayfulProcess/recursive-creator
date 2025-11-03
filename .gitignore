@@ -46,3 +46,6 @@ Thumbs.db
 
 # Misc
 *.pem
+
+# Reference/archive documents
+z.ignore/
