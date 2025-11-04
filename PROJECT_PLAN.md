@@ -606,6 +606,80 @@ YOUTUBE_API_KEY=your-youtube-api-key
 
 ---
 
+## Next Session Tasks (Post Auth Implementation)
+
+> **Note:** These tasks are for AFTER dual auth has been implemented in jongu-tool-best-possible-self and recursive-channels-fresh
+
+### 1. Unified Auth Modals Across All Projects ✅
+
+**Goal:** Use the same DualAuth component in recursive-creator as used in channels and journal
+
+**Current Status:**
+- ✅ jongu-tool-best-possible-self has DualAuth component
+- ✅ recursive-channels-fresh has DualAuth component
+- ⏳ recursive-creator needs to adopt the SAME component (currently has own implementation)
+
+**Action Items:**
+- [ ] Replace recursive-creator's DualAuth with the final version from channels/journal
+- [ ] Ensure all three projects use identical auth UX
+- [ ] Test SSO across all three subdomains
+- [ ] Verify consistent dark mode styling
+
+### 2. Unified Headers & Footers Strategy
+
+**Challenge:**
+- Want headers/footers to match recursive-landing aesthetics
+- Tried shared GitHub repo → didn't like that approach
+- Tried porting spiral animation to React → didn't work
+
+**Options to Explore:**
+
+**Option A: Vanilla JS/CSS in Next.js Public Folder**
+- Keep header.html + footer.html in `/public/components/`
+- Include via `<Script>` and `<iframe>` or fetch + inject
+- Spiral animation stays vanilla JS (no React constraints)
+- Trade-off: Less React integration, but animations work
+
+**Option B: React Components with Vanilla Animation Library**
+- Convert HTML structure to React components
+- Import spiral.js as external script via `<Script>` tag
+- Animations run after React hydration
+- Trade-off: Need to ensure animations don't conflict with React
+
+**Option C: Shared NPM Package**
+- Create `@recursive/ui-components` package
+- Publish header/footer as React components
+- Import in all projects: `import { Header } from '@recursive/ui-components'`
+- Trade-off: Overhead of maintaining separate package
+
+**Option D: Copy-Paste Pattern (Simplest)**
+- Accept that headers/footers are copied across projects
+- When updating, update in all 4 projects simultaneously
+- Use Claude Code to make changes consistently
+- Trade-off: Manual sync, but full control per-project
+
+**Recommended:** Start with Option D (copy-paste), move to Option B if animations prove tricky
+
+**Action Items:**
+- [ ] Make a plan for header/footer strategy (choose option)
+- [ ] Test spiral animation in React component (Option B)
+- [ ] If spiral breaks, try vanilla script approach (Option A)
+- [ ] Document chosen solution in SHARED_UI.md
+- [ ] Implement in recursive-creator first (proof of concept)
+- [ ] Roll out to channels and journal if successful
+
+### 3. Resume Phase 1 Features
+
+**After Auth + UI are unified:**
+- [ ] Continue with story publisher implementation
+- [ ] Build story viewer
+- [ ] Implement image upload
+- [ ] Add preview mode
+
+See Phase 1 tasks in main project plan above.
+
+---
+
 ## Notes
 
 ### Why This Approach Works
