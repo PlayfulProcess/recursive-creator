@@ -9,14 +9,57 @@
 ## Project Overview
 
 **Name:** Recursive Creator
-**Purpose:** Unified creator hub for Recursive.eco ecosystem
+**Purpose:** Forge tools for collective meaning-making
 **Domain:** creator.recursive.eco (future)
 **Stack:** Next.js 15 + React 19 + Supabase + TypeScript
 
-**What We're Building:**
-1. **Story Publisher** - Parents upload images to create children's books
-2. **Playlist Wrapper** - Curated YouTube playlists for kids (privacy-enhanced)
+## Who This Is For (The Vulcan Vision) 🔨
+
+**PlayfulProcess = Vulcan, Regent of Taurus (Ascendant)**
+
+*"I build tools for the gods. I want cultural change through popularizing digital culture, creating a collective, giving people the right tools so they can create."*
+
+### Not a Traditional Developer
+- **Social worker** (MSW starting 2026) who vibe codes
+- **Activist/Artist** following Tillich + Vanessa Andreotti + Bayo Akomolafe (Hospicing Modernity)
+- **Toolmaker for the collective**, not platform builder for self
+- Cares about **art/activism/spirituality** > software optimization
+- **Process over outcome**, **beauty over efficiency**
+
+### The Mission: Gateway Building, Not Gatekeeping
+- Build the **forge** (upload tools, frameworks, infrastructure)
+- **People** use the forge to **create** (stories, wellness tools, contemplations)
+- Creations **feed back** to the collective (channels)
+- **Cultural change** through popularized digital creation
+
+### The Recursive Loop:
+```
+PlayfulProcess builds tools
+  ↓
+Parents create children's stories
+  ↓
+Stories published to Kids Stories channel
+  ↓
+Other families use & are inspired
+  ↓
+More people create tools & content
+  ↓
+Collective grows through participation
+  ↓
+LOOP: Cultural change emerges
+```
+
+**This is infrastructure for collective meaning-making, not a personal portfolio.**
+
+---
+
+## What We're Building (Tools for the Collective)
+
+1. **Story Publisher** - Parents upload images to create children's books (not just PlayfulProcess)
+2. **Playlist Wrapper** - Community curates YouTube playlists for kids (privacy-enhanced)
 3. **Account Hub** - Unified dashboard for all Recursive.eco content
+4. **Future: Existential Tarot** - Contemplation tool (Tillich meets digital culture, ontoject path)
+5. **Future: AI Contemplation Limits** - Introspection prompts after 10 AI attempts (hospicing modernity practice)
 
 ---
 
@@ -90,20 +133,22 @@ recursive-creator/
 
 **Question:** Should we convert recursive-landing's story viewer to React or use iframe?
 
-**Answer:** Use iframe! Much better approach.
+**Answer:** Use iframe! Much better for the Vulcan vision.
 
-**Why:**
-- ✅ Users see EXACT final product while editing (WYSIWYG)
-- ✅ Zero conversion effort (vanilla JS → React is 4-6 hours work)
+**Why (Toolmaker Perspective):**
+- ✅ **Creators see EXACT final beauty** while editing (WYSIWYG - gods deserve this)
+- ✅ Zero conversion effort (vanilla JS → React is 4-6 hours wasted on internal tooling)
 - ✅ All features work perfectly: fullscreen, swipe, keyboard, wheel
-- ✅ Update viewer once, benefits both upload tool and public site
-- ✅ Less code to maintain
+- ✅ Update viewer once, benefits both forge and public display
+- ✅ Less code to maintain = more time for art/activism/spirituality
 - ✅ 100% reliable vs 10-20% chance direct copy would work
+- ✅ **Non-technical creators** (parents) see their creation come alive immediately
 
 **Solution:**
-- **recursive-creator**: Upload tool with embedded iframe preview
-- **recursive-landing**: Keep existing beautiful viewer, add Supabase support
+- **recursive-creator**: The forge - simple upload tool with embedded iframe preview
+- **recursive-landing**: The gallery - beautiful viewer where all stories live publicly
 - **Communication**: URL params (`?story_id=123&preview=true`)
+- **Philosophy**: Separate creation tool (utilitarian) from display (artistic)
 
 ### 2. Story Viewer Architecture
 
@@ -158,14 +203,42 @@ if (storyId) {
 }
 ```
 
-### 3. Private/Unlisted/Public Content
+### 3. Design Philosophy: Forges for Mortals
 
-**Requirement:** Users need to preview stories before publishing
+**The Vulcan Principle:** Tools must be simple enough for non-technical creators to wield.
+
+**Design Constraints for All Forges:**
+- ✅ **< 10 minutes** to create something meaningful
+- ✅ **No technical jargon** - labels a parent understands
+- ✅ **Immediate preview** - see beauty come alive
+- ✅ **Forgiving UX** - mistakes are easy to fix
+- ✅ **Optional complexity** - advanced features hidden until needed
+- ✅ **Mobile-friendly** - create on phone while kids nap
+- ✅ **Inspiring** - using the tool feels playful, not bureaucratic
+
+**Anti-patterns to Avoid:**
+- ❌ Dev-focused UI (no "deploy," use "publish")
+- ❌ Multi-step wizards (everything on one screen if possible)
+- ❌ Hidden features (preview always visible)
+- ❌ Overwhelming options (start simple, add complexity later)
+- ❌ Ugly internal tools (even forges deserve beauty)
+
+**The Test:**
+Could a parent who's never coded before create a story for their child in under 10 minutes, while feeling inspired rather than frustrated?
+
+If no → simplify the forge.
+
+### 4. Visibility & Access (Donations-Only Philosophy)
+
+**Requirement:** Gateway building, not gatekeeping
 
 **Solution:**
-- Server-side permission checks in Next.js routes
-- Visibility options: private (owner only), unlisted (anyone with link), public (everyone)
-- Preview mode shows unpublished content to owner
+- Visibility in story_data JSONB: `"visibility": "public"` or `"private"`
+- NO paywalls - all published stories accessible to everyone
+- Optional donation prompts (gentle, not pushy)
+- Creators own their content
+- Preview mode for drafts (creator sees before publishing)
+- RLS policies enforce creator-only editing, public viewing
 
 ### 3. Auth Portability
 
@@ -198,30 +271,59 @@ if (storyId) {
 - [x] Auth fully working with dual auth (magic link + OTP)
 - [x] Build tested and passing ✅
 
-### 🔨 Next Steps (Phase 1 - Story Upload Tool):
+### 🔨 Next Steps (Phase 1 - Forge the Story Creation Tool):
+
+**Goal:** Enable ANYONE (especially parents) to create beautiful children's stories and publish to the collective.
+
+**The Forge Architecture:**
+- Simple form (title, subtitle, author name)
+- Drag & drop images (low barrier to entry)
+- Live iframe preview (see the beauty immediately)
+- Publish to Kids Stories channel (collective contribution)
+- Donations-only model (no paywalls, gateway building)
+
+**Implementation:**
 - [ ] **Create Supabase JSONB schema** for stories (SIMPLE_JSONB_SCHEMA.md)
   - `stories` table (id, slug, story_data jsonb)
   - `story_pages` table (story_id, page_number, page_data jsonb)
   - Storage bucket 'story-images'
-  - RLS policies (JSONB-based)
+  - RLS policies (creator can edit, everyone can view published)
+  - `visibility` field for donations-only philosophy
+
 - [ ] **Update recursive-landing viewer** to support Supabase
   - Add `?story_id=uuid` parameter support
-  - Add `?preview=true` mode for drafts
+  - Add `?preview=true` mode for drafts (creator sees before publishing)
   - Keep backward compatibility with `?story=slug` (local JSON files)
   - Fetch from Supabase when story_id provided
-- [ ] **Build upload tool** in recursive-creator
-  - `/dashboard/stories/new` route
-  - Image upload with drag & drop to Supabase Storage
-  - Page reordering
-  - Iframe preview embedded in upload flow (shows recursive.eco viewer)
-  - Save draft / Publish workflow
-  - Updates story_data JSONB (title, subtitle, author, visibility, published)
-- [ ] **Test end-to-end** story creation and preview
+  - Beautiful experience (gods deserve beauty)
 
-### 📋 Future Phases:
-- [ ] Phase 2: Playlist wrapper (YouTube playlist tool)
-- [ ] Phase 3: Account hub (unified dashboard)
-- [ ] Phase 4: Polish & deploy
+- [ ] **Build the forge** in recursive-creator (`/dashboard/stories/new`)
+  - Simple form: title, subtitle, author
+  - **Drag & drop images** - mortals can wield this tool
+  - **Page reordering** - intuitive, no technical knowledge needed
+  - **Iframe preview embedded** - shows recursive.eco viewer in real-time (WYSIWYG)
+  - **Save draft / Publish** workflow - iterate before sharing
+  - Updates story_data JSONB (flexible for future fields)
+  - Publishes to Kids Stories channel (collective grows)
+
+- [ ] **Test with non-technical creators** - parents, not devs
+  - Can they create a story in < 10 minutes?
+  - Is the preview inspiring?
+  - Does publish to channel work smoothly?
+
+### 📋 Future Forges (Tools for Cultural Change):
+- [ ] **Phase 2:** Playlist wrapper - Community curates kid-friendly YouTube playlists
+- [ ] **Phase 3:** Existential Tarot - Contemplation tool (Tillich + Hospicing Modernity)
+  - Ontoject path (beyond subject/object)
+  - Existential exploration, not divination
+  - Integration with Best Possible Self journaling
+  - AI contemplation with introspection limits
+- [ ] **Phase 4:** AI Contemplation Limits - Prompts for introspection after 10 AI attempts
+  - Hospicing modernity practice
+  - Call for self-reflection
+  - Gateway to deeper contemplation
+- [ ] **Phase 5:** Account hub - Unified dashboard for all tools
+- [ ] **Phase 6:** Vibe coding course integration - Teach others to build their own forges
 
 ---
 
