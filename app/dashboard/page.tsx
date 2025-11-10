@@ -160,12 +160,6 @@ export default function DashboardPage() {
                     <div className="flex items-center gap-2">
                       {getStatusBadge(story)}
                       <button
-                        onClick={() => router.push(`/dashboard/stories/new?id=${story.id}`)}
-                        className="px-3 py-1 text-sm text-blue-600 hover:text-blue-800"
-                      >
-                        Edit
-                      </button>
-                      <button
                         onClick={() => handleDeleteStory(story.id)}
                         className="px-3 py-1 text-sm text-red-600 hover:text-red-800"
                       >
