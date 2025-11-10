@@ -61,6 +61,28 @@ export default function DashboardPage() {
     }
   };
 
+  const handleDeleteStory = async (storyId: string) => {
+    if (!confirm('Are you sure you want to delete this story? This cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('user_documents')
+        .delete()
+        .eq('id', storyId)
+        .eq('user_id', user!.id);  // Extra safety check
+
+      if (error) throw error;
+
+      // Refresh the list
+      fetchStories();
+    } catch (err) {
+      console.error('Error deleting story:', err);
+      alert('Failed to delete story. Please try again.');
+    }
+  };
+
   if (status === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -138,10 +160,16 @@ export default function DashboardPage() {
                     <div className="flex items-center gap-2">
                       {getStatusBadge(story)}
                       <button
-                        onClick={() => router.push(`/dashboard/stories/edit/${story.id}`)}
+                        onClick={() => router.push(`/dashboard/stories/new?id=${story.id}`)}
                         className="px-3 py-1 text-sm text-blue-600 hover:text-blue-800"
                       >
                         Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteStory(story.id)}
+                        className="px-3 py-1 text-sm text-red-600 hover:text-red-800"
+                      >
+                        Delete
                       </button>
                     </div>
                   </div>

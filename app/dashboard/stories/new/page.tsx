@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/components/AuthProvider';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase-client';
 
 interface Page {
@@ -15,7 +15,11 @@ interface Page {
 export default function NewStoryPage() {
   const { user, status } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
+
+  const storyId = searchParams.get('id');
+  const isEditing = !!storyId;
 
   const [title, setTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
@@ -23,12 +27,55 @@ export default function NewStoryPage() {
   const [pages, setPages] = useState<Page[]>([]);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  if (status === 'loading') {
+  // Load existing story if editing
+  useEffect(() => {
+    if (isEditing && user && storyId) {
+      loadStory(storyId);
+    }
+  }, [isEditing, user, storyId]);
+
+  const loadStory = async (id: string) => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('user_documents')
+        .select('*')
+        .eq('id', id)
+        .eq('user_id', user!.id)
+        .single();
+
+      if (error) throw error;
+      if (!data) throw new Error('Story not found');
+
+      // Populate form fields
+      setTitle(data.document_data.title || '');
+      setSubtitle(data.document_data.subtitle || '');
+      setAuthor(data.document_data.author || '');
+
+      // Load existing pages
+      if (data.document_data.pages && Array.isArray(data.document_data.pages)) {
+        const loadedPages: Page[] = data.document_data.pages.map((p: any, idx: number) => ({
+          id: `existing-${idx}`,
+          page_number: p.page_number,
+          image_url: p.image_url,
+        }));
+        setPages(loadedPages);
+      }
+    } catch (err) {
+      console.error('Error loading story:', err);
+      setError('Failed to load story');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (status === 'loading' || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-gray-600">Loading...</div>
@@ -175,49 +222,81 @@ export default function NewStoryPage() {
     setError(null);
 
     try {
-      // First, create the story document
       const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
-      const { data: storyData, error: insertError } = await supabase
-        .from('user_documents')
-        .insert({
-          user_id: user.id,
-          document_type: 'story',
-          tool_slug: 'story',  // Constant for all stories (for filtering)
-          story_slug: slug,    // Unique slug for this specific story (for retrieval)
-          document_data: {
-            title: title.trim(),
-            subtitle: subtitle.trim(),
-            author: author.trim() || 'Anonymous',
-            is_active: 'false',  // String! (consistent with tools)
-            reviewed: 'false',
-            creator_id: user.id,
-            pages: []  // Will update after uploading images
-          }
-        })
-        .select()
-        .single();
+      let currentStoryId = storyId;
 
-      if (insertError) throw insertError;
-      if (!storyData) throw new Error('Failed to create story');
+      if (isEditing) {
+        // UPDATE existing story
+        // Upload images and get page data
+        let uploadedPages = [];
+        if (pages.length > 0) {
+          uploadedPages = await uploadImagesToStorage(currentStoryId!);
+        }
 
-      // Upload images and get page data
-      let uploadedPages = [];
-      if (pages.length > 0) {
-        uploadedPages = await uploadImagesToStorage(storyData.id);
-
-        // Update the story with page data
         const { error: updateError } = await supabase
           .from('user_documents')
           .update({
+            story_slug: slug,  // Update slug in case title changed
             document_data: {
-              ...storyData.document_data,
+              title: title.trim(),
+              subtitle: subtitle.trim(),
+              author: author.trim() || 'Anonymous',
+              is_active: 'false',  // String! (consistent with tools)
+              reviewed: 'false',
+              creator_id: user.id,
               pages: uploadedPages
             }
           })
-          .eq('id', storyData.id);
+          .eq('id', currentStoryId!)
+          .eq('user_id', user.id);
 
         if (updateError) throw updateError;
+      } else {
+        // INSERT new story
+        const { data: storyData, error: insertError } = await supabase
+          .from('user_documents')
+          .insert({
+            user_id: user.id,
+            document_type: 'story',
+            tool_slug: 'story',  // Constant for all stories (for filtering)
+            story_slug: slug,    // Unique slug for this specific story (for retrieval)
+            document_data: {
+              title: title.trim(),
+              subtitle: subtitle.trim(),
+              author: author.trim() || 'Anonymous',
+              is_active: 'false',  // String! (consistent with tools)
+              reviewed: 'false',
+              creator_id: user.id,
+              pages: []  // Will update after uploading images
+            }
+          })
+          .select()
+          .single();
+
+        if (insertError) throw insertError;
+        if (!storyData) throw new Error('Failed to create story');
+
+        currentStoryId = storyData.id;
+
+        // Upload images and get page data
+        let uploadedPages = [];
+        if (pages.length > 0) {
+          uploadedPages = await uploadImagesToStorage(currentStoryId);
+
+          // Update the story with page data
+          const { error: updateError } = await supabase
+            .from('user_documents')
+            .update({
+              document_data: {
+                ...storyData.document_data,
+                pages: uploadedPages
+              }
+            })
+            .eq('id', currentStoryId);
+
+          if (updateError) throw updateError;
+        }
       }
 
       setSuccess(true);
