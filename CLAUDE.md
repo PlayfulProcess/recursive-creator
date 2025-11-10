@@ -1,8 +1,8 @@
 # Context for Claude Code: Recursive Creator Project
 
-> **Last Updated:** 2025-11-09 (Session 6)
-> **Current Phase:** Phase 0 COMPLETE - Clean Starter Template Ready ✅
-> **Next Session:** Build iframe-based story upload tool (Phase 1)
+> **Last Updated:** 2025-11-10 (Session 7)
+> **Current Phase:** Phase 1 STARTED - Story Approval Migration Ready ✅
+> **Next Session:** Run migration, build story upload forge
 
 ---
 
@@ -271,6 +271,32 @@ If no → simplify the forge.
 - [x] Auth fully working with dual auth (magic link + OTP)
 - [x] Build tested and passing ✅
 
+### ✅ Completed (Phase 1 - Story Architecture & Migration):
+- [x] **Consulted Supabase AI** about approval workflow design
+  - Documented in: `supabase-ai-prompt.md`
+  - Received comprehensive migration SQL + recommendations
+- [x] **Created RECOMMENDATION.md** - Implementation plan based on Supabase AI
+  - Edge Functions approach (not DB triggers)
+  - Hybrid columns + JSONB design
+  - Step-by-step guide for proceeding
+- [x] **Created BACKLOG_DB_OPTIMIZATIONS.md** - Future improvements
+  - Generic approval system
+  - Audit trail system
+  - Unified content visibility
+  - 10 optimization opportunities with priority levels
+- [x] **Created migration SQL** - `supabase/migrations/001-story-approval.sql`
+  - Adds 'story' to document_type
+  - Adds approval workflow columns (approval_status, published, visibility, etc.)
+  - Creates indexes for fast queries
+  - Creates is_admin_user() helper function
+  - Adds RLS policies (owner, admin, public)
+  - Story reviews audit table (commented out for later)
+- [x] **Created migration guide** - `supabase/migrations/README.md`
+  - Step-by-step instructions for running migration
+  - Admin bootstrap SQL
+  - Test queries for verification
+  - Troubleshooting guide
+
 ### 🔨 Next Steps (Phase 1 - Forge the Story Creation Tool):
 
 **Goal:** Enable ANYONE (especially parents) to create beautiful children's stories and publish to the collective.
@@ -279,16 +305,31 @@ If no → simplify the forge.
 - Simple form (title, subtitle, author name)
 - Drag & drop images (low barrier to entry)
 - Live iframe preview (see the beauty immediately)
-- Publish to Kids Stories channel (collective contribution)
+- Submission → Admin approval → Publish to Kids Stories channel
 - Donations-only model (no paywalls, gateway building)
 
 **Implementation:**
-- [ ] **Create Supabase JSONB schema** for stories (SIMPLE_JSONB_SCHEMA.md)
-  - `stories` table (id, slug, story_data jsonb)
-  - `story_pages` table (story_id, page_number, page_data jsonb)
-  - Storage bucket 'story-images'
-  - RLS policies (creator can edit, everyone can view published)
-  - `visibility` field for donations-only philosophy
+
+✅ **Migration ready to run** - All SQL prepared in `supabase/migrations/`
+
+**Next immediate steps:**
+
+- [ ] **Run the migration** in Supabase SQL Editor
+  - Copy/paste `001-story-approval.sql`
+  - Safe to run multiple times (idempotent)
+  - See `supabase/migrations/README.md` for guide
+
+- [ ] **Bootstrap admin user**
+  ```sql
+  UPDATE profiles
+  SET profile_data = jsonb_set(profile_data, '{is_admin}', 'true'::jsonb, true)
+  WHERE email = 'your-email@example.com';
+  ```
+
+- [ ] **Create storage bucket** for story images
+  - Bucket name: `story-images`
+  - Path pattern: `story-images/{user_id}/{doc_id}/filename.png`
+  - Public read, authenticated write
 
 - [ ] **Update recursive-landing viewer** to support Supabase
   - Add `?story_id=uuid` parameter support
@@ -302,14 +343,26 @@ If no → simplify the forge.
   - **Drag & drop images** - mortals can wield this tool
   - **Page reordering** - intuitive, no technical knowledge needed
   - **Iframe preview embedded** - shows recursive.eco viewer in real-time (WYSIWYG)
-  - **Save draft / Publish** workflow - iterate before sharing
-  - Updates story_data JSONB (flexible for future fields)
-  - Publishes to Kids Stories channel (collective grows)
+  - **Save draft / Submit for approval** workflow
+  - Stores in user_documents with document_type='story'
+  - Sets approval_status='pending' on submission
+
+- [ ] **Build admin dashboard** (`/admin/stories`)
+  - List pending stories
+  - Preview in iframe (same viewer as public)
+  - Approve/Reject buttons
+  - Calls Edge Function to update approval_status
+
+- [ ] **Create Edge Function** for approval actions
+  - Route: `supabase/functions/approve-story/`
+  - Validates admin JWT
+  - Updates approval_status, reviewer_id, reviewed_at
+  - Returns success/error
 
 - [ ] **Test with non-technical creators** - parents, not devs
   - Can they create a story in < 10 minutes?
   - Is the preview inspiring?
-  - Does publish to channel work smoothly?
+  - Does submission → approval → publish workflow work smoothly?
 
 ### 📋 Future Forges (Tools for Cultural Change):
 - [ ] **Phase 2:** Playlist wrapper - Community curates kid-friendly YouTube playlists
@@ -745,8 +798,17 @@ console.log('🔢 OTP verification response:', { success, error, hasSession })
 ### Planning Documents (Read These First):
 1. **PROJECT_PLAN.md** - Master plan, all phases, timeline
 2. **AUTH_IMPLEMENTATION_PLAN.md** - Complete auth code + guide
-3. **SUPABASE_SCHEMA_REVISED.md** - Database design (relational)
-4. **AUTH_PORTABILITY.md** - How to copy to other projects
+3. **RECOMMENDATION.md** - Story approval implementation plan (Supabase AI recommendations)
+4. **supabase-ai-prompt.md** - Full Supabase AI consultation about approval workflow
+5. **SUPABASE_SCHEMA_REVISED.md** - Database design (relational - older approach)
+6. **AUTH_PORTABILITY.md** - How to copy to other projects
+
+### Migration Files (Ready to Run):
+1. **supabase/migrations/001-story-approval.sql** - Complete migration SQL
+2. **supabase/migrations/README.md** - Step-by-step guide for running migration
+
+### Optimization Documentation:
+1. **z.Supabase/BACKLOG_DB_OPTIMIZATIONS.md** - Future improvements (don't over-engineer!)
 
 ### Existing Code (Reference Implementation):
 1. **components/auth/DualAuth.tsx** - ✅ Dual auth (magic link + OTP) + sessionStorage email
@@ -928,22 +990,24 @@ npx supabase db push
 
 ---
 
-## Current Session Context (Session 3)
+## Current Session Context (Session 7)
 
-**Date:** 2025-11-03
-**Focus:** Debug auth failures + implement dark mode + OTP fallback
+**Date:** 2025-11-10
+**Focus:** Create story approval migration + documentation
 **Accomplishments:**
-- ✅ Diagnosed root cause: cookie domain configuration bug
-- ✅ Fixed cookie domain logic in client + server files
-- ✅ Converted all auth pages to dark mode
-- ✅ Added OTP input fallback to error page
-- ✅ Dev server tested locally (port 3001)
+- ✅ Reviewed Supabase AI recommendations
+- ✅ Created RECOMMENDATION.md (implementation plan)
+- ✅ Created BACKLOG_DB_OPTIMIZATIONS.md (future improvements)
+- ✅ Created migration SQL file (001-story-approval.sql)
+- ✅ Created migration guide (README.md)
+- ✅ Build tested and passing
 
 **What User Needs to Do Next:**
-1. **Update Supabase Email Template** (see template below)
-2. Test auth flow locally with real email
-3. Deploy to Vercel and test on production domain
-4. If working, copy auth pattern to other projects
+1. **Run migration in Supabase SQL Editor** (copy/paste 001-story-approval.sql)
+2. **Bootstrap admin user** (UPDATE profiles SET profile_data...)
+3. **Test RLS policies** with dummy story
+4. **Begin building story upload forge** (dashboard/stories/new)
+5. **Build admin approval UI** (admin/stories)
 
 **Supabase Email Template (Magic Link + OTP):**
 
