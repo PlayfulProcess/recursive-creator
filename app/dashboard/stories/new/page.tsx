@@ -10,8 +10,6 @@ interface Page {
   page_number: number;
   image_url: string;
   image_file?: File;
-  alt_text: string;
-  narration: string;
 }
 
 export default function NewStoryPage() {
@@ -67,9 +65,7 @@ export default function NewStoryPage() {
           id: `temp-${Date.now()}-${i}`,
           page_number: pages.length + i + 1,
           image_url: objectUrl,
-          image_file: file,
-          alt_text: '',
-          narration: ''
+          image_file: file
         });
       }
 
@@ -105,12 +101,6 @@ export default function NewStoryPage() {
     }
   };
 
-  const handleUpdatePage = (pageId: string, field: 'alt_text' | 'narration', value: string) => {
-    setPages(pages.map(p =>
-      p.id === pageId ? { ...p, [field]: value } : p
-    ));
-  };
-
   const uploadImagesToStorage = async (storyId: string) => {
     const uploadedPages = [];
 
@@ -141,9 +131,7 @@ export default function NewStoryPage() {
 
       uploadedPages.push({
         page_number: i + 1,
-        image_url: publicUrl,
-        alt_text: page.alt_text || `Page ${i + 1}`,
-        narration: page.narration || ''
+        image_url: publicUrl
       });
     }
 
@@ -205,9 +193,6 @@ export default function NewStoryPage() {
       }
 
       setSuccess(true);
-      setTimeout(() => {
-        router.push('/dashboard');
-      }, 2000);
     } catch (err) {
       console.error('Error saving story:', err);
       setError(err instanceof Error ? err.message : 'Failed to save story');
@@ -242,7 +227,7 @@ export default function NewStoryPage() {
           {success && (
             <div className="mb-6 bg-green-900/50 border border-green-700 rounded-lg p-4">
               <p className="text-green-200">
-                Story saved! Redirecting to dashboard...
+                Story saved successfully! You can continue editing or go back to your dashboard.
               </p>
             </div>
           )}
@@ -392,26 +377,6 @@ export default function NewStoryPage() {
                                 </button>
                               </div>
                             </div>
-
-                            {/* Alt Text */}
-                            <input
-                              type="text"
-                              placeholder="Image description (optional)"
-                              value={page.alt_text}
-                              onChange={(e) => handleUpdatePage(page.id, 'alt_text', e.target.value)}
-                              className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded text-white placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              disabled={saving}
-                            />
-
-                            {/* Narration */}
-                            <textarea
-                              placeholder="Page narration (optional)"
-                              value={page.narration}
-                              onChange={(e) => handleUpdatePage(page.id, 'narration', e.target.value)}
-                              rows={2}
-                              className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded text-white placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                              disabled={saving}
-                            />
                           </div>
                         </div>
                       </div>
@@ -425,7 +390,7 @@ export default function NewStoryPage() {
             <div className="bg-blue-900/30 border border-blue-700/50 rounded-lg p-4">
               <p className="text-sm text-blue-200">
                 <strong>How it works:</strong> Add your story details above, then upload images to create pages.
-                You can reorder pages and add descriptions or narration. When you're ready, save your draft for later or submit for approval.
+                You can reorder pages with the arrow buttons. When you're ready, save your draft.
               </p>
             </div>
 

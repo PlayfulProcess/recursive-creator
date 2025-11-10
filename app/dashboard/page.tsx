@@ -43,21 +43,6 @@ export default function DashboardPage() {
       </nav>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Welcome Card */}
-        <div className="bg-white rounded-lg shadow p-6 mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">
-            Welcome to your Dashboard!
-          </h2>
-          <p className="text-gray-600 mb-4">
-            Signed in as: <strong>{user.email}</strong>
-          </p>
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-sm text-blue-800">
-              <strong>Auth is working!</strong> This dashboard will be the hub for creating stories and playlists.
-            </p>
-          </div>
-        </div>
-
         {/* Stories Section */}
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex justify-between items-center mb-4">
