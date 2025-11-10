@@ -25,6 +25,7 @@ export default function NewStoryPage() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (status === 'loading') {
@@ -101,6 +102,32 @@ export default function NewStoryPage() {
     }
   };
 
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === dropIndex) return;
+
+    const newPages = [...pages];
+    const [draggedPage] = newPages.splice(draggedIndex, 1);
+    newPages.splice(dropIndex, 0, draggedPage);
+
+    setPages(newPages);
+    setDraggedIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+  };
+
   const uploadImagesToStorage = async (storyId: string) => {
     const uploadedPages = [];
 
@@ -156,7 +183,7 @@ export default function NewStoryPage() {
         .insert({
           user_id: user.id,
           document_type: 'story',
-          story_slug: slug,
+          tool_slug: slug,
           document_data: {
             title: title.trim(),
             subtitle: subtitle.trim(),
@@ -315,7 +342,7 @@ export default function NewStoryPage() {
                     {uploading ? 'Processing images...' : '+ Add Images'}
                   </button>
                   <p className="mt-2 text-xs text-gray-500">
-                    Click to select one or more images. You can reorder them after uploading.
+                    Click to select one or more images. Drag pages to reorder them.
                   </p>
                 </div>
 
@@ -325,7 +352,16 @@ export default function NewStoryPage() {
                     {pages.map((page, index) => (
                       <div
                         key={page.id}
-                        className="bg-gray-700 rounded-lg p-4 border border-gray-600"
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, index)}
+                        onDragOver={handleDragOver}
+                        onDrop={(e) => handleDrop(e, index)}
+                        onDragEnd={handleDragEnd}
+                        className={`bg-gray-700 rounded-lg p-4 border-2 cursor-move ${
+                          draggedIndex === index
+                            ? 'border-blue-500 opacity-50'
+                            : 'border-gray-600 hover:border-gray-500'
+                        } transition-all`}
                       >
                         <div className="flex gap-4">
                           {/* Image Preview */}
@@ -338,18 +374,18 @@ export default function NewStoryPage() {
                           </div>
 
                           {/* Page Details */}
-                          <div className="flex-grow space-y-2">
+                          <div className="flex-grow">
                             <div className="flex items-center justify-between">
                               <span className="text-sm font-medium text-white">
                                 Page {index + 1}
                               </span>
-                              <div className="flex gap-1">
+                              <div className="flex gap-2">
                                 {/* Move Up */}
                                 {index > 0 && (
                                   <button
                                     type="button"
                                     onClick={() => handleMovePage(page.id, 'up')}
-                                    className="p-1 text-gray-400 hover:text-white"
+                                    className="px-3 py-2 text-xl text-gray-400 hover:text-white hover:bg-gray-600 rounded transition-colors"
                                     title="Move up"
                                   >
                                     ↑
@@ -360,7 +396,7 @@ export default function NewStoryPage() {
                                   <button
                                     type="button"
                                     onClick={() => handleMovePage(page.id, 'down')}
-                                    className="p-1 text-gray-400 hover:text-white"
+                                    className="px-3 py-2 text-xl text-gray-400 hover:text-white hover:bg-gray-600 rounded transition-colors"
                                     title="Move down"
                                   >
                                     ↓
@@ -370,7 +406,7 @@ export default function NewStoryPage() {
                                 <button
                                   type="button"
                                   onClick={() => handleRemovePage(page.id)}
-                                  className="p-1 text-red-400 hover:text-red-300"
+                                  className="px-3 py-2 text-xl text-red-400 hover:text-red-300 hover:bg-gray-600 rounded transition-colors"
                                   title="Remove page"
                                 >
                                   ✕
