@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, Suspense } from 'react';
 import { useAuth } from '@/components/AuthProvider';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase-client';
 
 interface Page {
@@ -17,10 +17,13 @@ interface UploadedPage {
   image_url: string;
 }
 
-export default function NewStoryPage() {
+function NewStoryPageContent() {
   const { user, status } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
+
+  const editingId = searchParams.get('id');
 
   const [title, setTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
@@ -28,12 +31,53 @@ export default function NewStoryPage() {
   const [pages, setPages] = useState<Page[]>([]);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  if (status === 'loading') {
+  // Load story data when editing
+  useEffect(() => {
+    if (editingId && user) {
+      loadStory(editingId);
+    }
+  }, [editingId, user]);
+
+  const loadStory = async (id: string) => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('user_documents')
+        .select('*')
+        .eq('id', id)
+        .eq('user_id', user!.id)
+        .single();
+
+      if (error) throw error;
+
+      setTitle(data.document_data.title || '');
+      setSubtitle(data.document_data.subtitle || '');
+      setAuthor(data.document_data.author || '');
+
+      // Load existing pages (as URLs, not File objects)
+      if (data.document_data.pages) {
+        const loadedPages: Page[] = data.document_data.pages.map((p: any, idx: number) => ({
+          id: `loaded-${idx}`,
+          page_number: p.page_number,
+          image_url: p.image_url,
+        }));
+        setPages(loadedPages);
+      }
+    } catch (err) {
+      console.error('Error loading story:', err);
+      setError('Failed to load story');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (status === 'loading' || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-900">
         <div className="text-gray-400">Loading...</div>
@@ -468,6 +512,18 @@ export default function NewStoryPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function NewStoryPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <div className="text-gray-400">Loading...</div>
+      </div>
+    }>
+      <NewStoryPageContent />
+    </Suspense>
   );
 }
 
