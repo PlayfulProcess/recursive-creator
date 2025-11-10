@@ -13,8 +13,38 @@
 - ✅ Vanilla-style viewers (creative freedom)
 - ✅ React dashboard (modern DX)
 - ✅ Private + public content (flexible visibility)
+- ✅ **Consistency with existing patterns** (don't reinvent the wheel)
 
 **Not fast to market - sustainable architecture.**
+
+---
+
+## Design Principles
+
+### Visual Approval Dashboard Philosophy
+
+**Problem:** JSONB data is hard to read in table format. Admins shouldn't need to parse JSON to approve content.
+
+**Solution:** Admin approval dashboards should **render content as it will appear when published**.
+
+**Implementation:**
+- ✅ **Story approval** - Preview story in iframe (same recursive-landing viewer as public)
+- ✅ **Tool approval** - Show tool rendered (not just JSONB fields)
+- ✅ **Channel approval** - Show channel card rendered
+
+**Why this matters:**
+1. **Faster approvals** - See what users will see, instantly know if it's good
+2. **Catch issues** - Broken images, formatting problems visible immediately
+3. **Better UX** - Admin experience should feel polished, not like database admin
+4. **Consistency** - Same viewer for preview, approval, and public display
+
+**To implement for recursive-channels:**
+- Currently shows tools/channels in table rows (hard to evaluate)
+- Should render each tool/channel card as it appears on channels.recursive.eco
+- Click to expand full view (like iframe for stories)
+
+**Vulcan Principle Applied:**
+Even admin tools should be beautiful. The forge itself deserves craft. 🔨
 
 ---
 
@@ -156,84 +186,133 @@ export function StoryViewer({ story }) {
 
 ## Data Model (Supabase)
 
-### ✅ Full JSONB Design (Simple & Fast)
+### ✅ REVISED: Use Existing user_documents Table (Consistent with Tools/Channels)
 
-**Design Decision:** Use JSONB-heavy approach for solo dev speed and AI integration.
+**Design Decision:** Stories use the existing `user_documents` table with `document_type='story'`.
+
+**Key Learning:** After initial planning, discovered that tools and channels already have an approval workflow pattern using JSONB-heavy approach. **Consistency > reinventing patterns.**
+
+**The Recursive.eco Approval Pattern:**
+```json
+{
+  "title": "Story Title",
+  "author": "Creator Name",
+  "is_active": "false",  // String! "false"=pending, "true"=public
+  "reviewed": "false",   // String! Has admin reviewed?
+  "creator_id": "uuid",
+  "approved_at": "2025-11-10T12:00:00Z",  // When approved
+  "approved_by": "admin",
+  "pages": [...]  // Story content
+}
+```
+
+**Why This Approach:**
+- ✅ **Consistent** with existing tools/channels pattern
+- ✅ **Simple** - One field (`is_active`) controls visibility
+- ✅ **No new tables** - Reuse existing infrastructure
+- ✅ **JSONB-friendly** - Same pattern you already know
+- ✅ **AI-friendly** - JSON is native for LLMs
+- ✅ **Solo-dev optimized** - Fast iteration, low ceremony
+- ✅ **Flexible** - Add fields without migrations
 
 **Rationale:**
 - **Small scale** (200 users max) → JSONB is plenty fast
 - **Solo developer** → Speed of iteration > perfect structure
-- **Infrequent querying** → Don't need optimization
-- **AI-friendly** → JSON is native format for LLMs, embeddings, semantic search
-- **No migrations** → Change structure anytime without ceremony
-- **Claude builds visualizations** → Custom dashboards > Supabase Studio
-- **Same pattern as existing projects** → Consistency with channels/journal
+- **Consistency** → Don't create different patterns for each content type
+- **Proven** → Tools/channels already work this way
+- **Domain knowledge > generic advice** - Supabase AI gave good generic patterns, but our codebase has better patterns already
 
-**See:** `SIMPLE_JSONB_SCHEMA.md` for complete schema and examples.
+**See:** `APPROVAL_PATTERN.md` for complete documentation of the approval workflow.
 
-### Complete Schema (3 Tables)
+### Revised Schema (Use Existing Tables)
 
 ```sql
--- Stories (everything in JSONB)
-CREATE TABLE stories (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  slug TEXT UNIQUE NOT NULL,
-  story_data JSONB DEFAULT '{}'::jsonb,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+-- NO NEW TABLES! Use existing user_documents table
+-- Just add 'story' to document_type constraint
 
--- Indexes for common JSONB queries
-CREATE INDEX idx_stories_creator ON stories ((story_data->>'creator_id'));
-CREATE INDEX idx_stories_visibility ON stories ((story_data->>'visibility'));
+ALTER TABLE user_documents
+  ADD CONSTRAINT user_documents_document_type_check
+  CHECK (document_type = ANY (ARRAY[
+    'tool_session', 'creative_work', 'preference',
+    'bookmark', 'interaction', 'transaction',
+    'story'  -- NEW!
+  ]));
 
--- Story pages (minimal structure)
-CREATE TABLE story_pages (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  story_id UUID REFERENCES stories(id) ON DELETE CASCADE,
-  page_number INTEGER NOT NULL,
-  page_data JSONB DEFAULT '{}'::jsonb,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(story_id, page_number)
-);
+-- Optional: story_slug for fast URL lookups
+ALTER TABLE user_documents
+  ADD COLUMN IF NOT EXISTS story_slug text;
 
--- Playlists (everything in JSONB)
-CREATE TABLE playlists (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  slug TEXT UNIQUE NOT NULL,
-  playlist_data JSONB DEFAULT '{}'::jsonb,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+-- Indexes for fast JSONB queries
+CREATE INDEX idx_user_documents_story_pending
+  ON user_documents ((document_data->>'is_active'))
+  WHERE document_type = 'story' AND document_data->>'is_active' = 'false';
 
-CREATE INDEX idx_playlists_creator ON playlists ((playlist_data->>'creator_id'));
+CREATE INDEX idx_user_documents_story_active
+  ON user_documents ((document_data->>'is_active'))
+  WHERE document_type = 'story' AND document_data->>'is_active' = 'true';
+
+CREATE INDEX idx_user_documents_story_slug
+  ON user_documents (story_slug)
+  WHERE document_type = 'story';
+
+-- Storage bucket for story images
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('story-images', 'story-images', true)
+ON CONFLICT (id) DO NOTHING;
 ```
 
-### JSONB Structure Examples
+**Migration file:** `supabase/migrations/001-story-approval-revised.sql`
 
-**story_data:**
+### JSONB Structure (document_data)
+
+**Story in user_documents:**
 ```json
 {
-  "title": "Bunny Finds Courage",
-  "subtitle": "A tale of bravery",
+  "title": "The Nest Knows Best: Bunny Coping Tricks",
+  "subtitle": "For Little Ones Learning to Sleep",
   "author": "PlayfulProcess",
-  "cover_image_url": "/stories/bunny/cover.jpg",
-  "visibility": "private",
-  "published": false,
-  "creator_id": "user-uuid-here",
-  "metadata": {
-    "themes": ["courage", "kindness"],
-    "reading_level": "early-reader",
-    "age_range": "3-6"
-  }
+  "cover_image_url": "story-images/{user_id}/{doc_id}/cover.png",
+
+  // Approval fields (consistent with tools/channels)
+  "is_active": "false",   // String! "false"=pending, "true"=public
+  "reviewed": "false",    // String! Has admin reviewed?
+  "creator_id": "uuid",
+
+  // When approved:
+  "approved_at": "2025-11-10T12:00:00Z",
+  "approved_by": "admin",
+
+  // Story content (pages array in JSONB)
+  "pages": [
+    {
+      "page_number": 1,
+      "image_url": "story-images/{user_id}/{doc_id}/page-1.png",
+      "alt_text": "Bunny sitting under a tree",
+      "narration": "Once upon a time, there was a brave little bunny..."
+    },
+    {
+      "page_number": 2,
+      "image_url": "story-images/{user_id}/{doc_id}/page-2.png",
+      "alt_text": "Bunny looking at the moon",
+      "narration": "Bunny couldn't sleep and felt worried..."
+    }
+  ]
 }
 ```
 
-**page_data:**
-```json
-{
-  "image_url": "/stories/bunny/page-1.jpg",
-  "alt_text": "Bunny sitting under a tree",
-  "narration": "Once upon a time, there was a brave little bunny..."
-}
+**Queries:**
+```sql
+-- Admin: Get pending stories
+SELECT * FROM user_documents
+WHERE document_type = 'story'
+AND document_data->>'is_active' = 'false'
+ORDER BY created_at DESC;
+
+-- Public: Get approved stories
+SELECT * FROM user_documents
+WHERE document_type = 'story'
+AND document_data->>'is_active' = 'true'
+ORDER BY created_at DESC;
 ```
 
 **playlist_data:**
@@ -437,23 +516,55 @@ CREATE POLICY "Users can delete their own images" ON storage.objects
 - [ ] Set up Storage bucket
 
 ### Phase 1: Story Publisher (Week 2-3)
+
+**Story Upload Forge (User-Facing):**
 - [ ] Dashboard layout with tabs
 - [ ] Story creation form (title, subtitle, author)
 - [ ] Image upload component (drag & drop)
 - [ ] Page ordering (drag to reorder)
-- [ ] Visibility controls (private/unlisted/public)
-- [ ] Preview mode (view before publishing)
-- [ ] Publish flow
+- [ ] **iframe preview** (embed recursive-landing viewer - WYSIWYG)
+- [ ] Save draft (is_active='false', reviewed='false')
+- [ ] Submit for approval (is_active='false', reviewed='false')
+- [ ] Stores in user_documents with document_type='story'
+
+**Admin Approval Dashboard:**
+- [ ] List pending stories (WHERE is_active='false')
+- [ ] **Visual preview** - Show story in iframe (same as public viewer!)
+  - Embed recursive-landing viewer with ?story_id=uuid&preview=true
+  - Admin sees exactly what users will see
+  - No parsing JSONB in tables
+- [ ] Approve button → Sets is_active='true', approved_at, approved_by
+- [ ] Reject button → Adds rejection_reason to JSONB
+- [ ] List approved/rejected stories (for reference)
+
+**Migration:**
+- [x] Run 001-story-approval-revised.sql
+- [ ] Bootstrap admin user (UPDATE profiles SET profile_data...)
 
 ### Phase 2: Story Viewer (Week 3-4)
+
+**Option A: Iframe Embed (Recommended - WYSIWYG)**
+- [ ] Update recursive-landing viewer to fetch from Supabase
+  - Add ?story_id=uuid parameter support
+  - Add ?preview=true mode (for owner preview)
+  - Keep backward compatibility with ?story=slug (local files)
+  - Fetch story data from Supabase when story_id provided
+- [ ] Iframe embed in recursive-creator
+  - /stories/[slug] page embeds recursive-landing viewer
+  - RLS policies control who can view
+  - Same viewer for: user preview, admin approval, public display
+
+**Option B: Convert to React (More Work, Might Break)**
 - [ ] Dynamic route `/stories/[slug]`
-- [ ] Permission checks (public/private/unlisted)
-- [ ] Convert recursive-landing viewer to React
+- [ ] Permission checks (RLS policies)
+- [ ] Convert recursive-landing viewer to React component
 - [ ] Keyboard navigation
 - [ ] Touch/swipe support
 - [ ] Fullscreen mode
 - [ ] Page indicator
 - [ ] Include spiral animations
+
+**Decision:** Start with Option A (iframe). Only do Option B if iframe has issues.
 
 ### Phase 3: Playlist Publisher (Week 5-6)
 - [ ] Playlist creation form
