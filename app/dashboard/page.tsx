@@ -20,12 +20,28 @@ interface Story {
   created_at: string;
 }
 
+interface Playlist {
+  id: string;
+  tool_slug: string;
+  story_slug: string;
+  document_data: {
+    title: string;
+    description?: string;
+    category?: string;
+    is_active: string;
+    reviewed: string;
+    videos?: any[];
+  };
+  created_at: string;
+}
+
 export default function DashboardPage() {
   const { user, status } = useAuth();
   const router = useRouter();
   const supabase = createClient();
 
   const [stories, setStories] = useState<Story[]>([]);
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -37,6 +53,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (user) {
       fetchStories();
+      fetchPlaylists();
     }
   }, [user]);
 
@@ -61,6 +78,25 @@ export default function DashboardPage() {
     }
   };
 
+  const fetchPlaylists = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('user_documents')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('tool_slug', 'playlist')
+        .eq('document_type', 'playlist')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setPlaylists(data || []);
+    } catch (err) {
+      console.error('Error fetching playlists:', err);
+    }
+  };
+
   const handleDeleteStory = async (storyId: string) => {
     if (!confirm('Are you sure you want to delete this story? This cannot be undone.')) {
       return;
@@ -80,6 +116,28 @@ export default function DashboardPage() {
     } catch (err) {
       console.error('Error deleting story:', err);
       alert('Failed to delete story. Please try again.');
+    }
+  };
+
+  const handleDeletePlaylist = async (playlistId: string) => {
+    if (!confirm('Are you sure you want to delete this playlist? This cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('user_documents')
+        .delete()
+        .eq('id', playlistId)
+        .eq('user_id', user!.id);
+
+      if (error) throw error;
+
+      // Refresh the list
+      fetchPlaylists();
+    } catch (err) {
+      console.error('Error deleting playlist:', err);
+      alert('Failed to delete playlist. Please try again.');
     }
   };
 
@@ -108,6 +166,82 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="space-y-8">
+        {/* Playlists Section */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold text-gray-900">My Playlists</h2>
+            <button
+              onClick={() => router.push('/dashboard/playlists/new')}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-colors"
+            >
+              Create New Playlist
+            </button>
+          </div>
+
+          {loading ? (
+            <p className="text-gray-600 text-sm">Loading playlists...</p>
+          ) : playlists.length === 0 ? (
+            <p className="text-gray-600 text-sm">
+              You haven't created any playlists yet. Click "Create New Playlist" to get started!
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {playlists.map((playlist) => (
+                <div
+                  key={playlist.id}
+                  className="border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-colors"
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        {playlist.document_data.title}
+                      </h3>
+                      {playlist.document_data.description && (
+                        <p className="text-sm text-gray-600 mt-1">
+                          {playlist.document_data.description}
+                        </p>
+                      )}
+                      <div className="flex items-center gap-3 mt-2">
+                        {playlist.document_data.category && (
+                          <>
+                            <p className="text-sm text-gray-500">
+                              {playlist.document_data.category}
+                            </p>
+                            <span className="text-gray-300">•</span>
+                          </>
+                        )}
+                        <p className="text-sm text-gray-500">
+                          {playlist.document_data.videos?.length || 0} videos
+                        </p>
+                        <span className="text-gray-300">•</span>
+                        <p className="text-sm text-gray-500">
+                          {new Date(playlist.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {getStatusBadge(playlist as any)}
+                      <button
+                        onClick={() => router.push(`/dashboard/playlists/new?id=${playlist.id}`)}
+                        className="px-3 py-1 text-sm text-purple-600 hover:text-purple-800"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeletePlaylist(playlist.id)}
+                        className="px-3 py-1 text-sm text-red-600 hover:text-red-800"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Stories Section */}
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex justify-between items-center mb-6">
@@ -177,6 +311,7 @@ export default function DashboardPage() {
               ))}
             </div>
           )}
+        </div>
         </div>
       </main>
     </div>
