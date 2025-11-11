@@ -1,8 +1,8 @@
 # Context for Claude Code: Recursive Creator Project
 
-> **Last Updated:** 2025-11-11 (Session 8 - Unified Viewer Architecture)
-> **Current Phase:** Phase 1 IN PROGRESS - Pivoting to Unified Content Viewer ✅
-> **Next Session:** Build unified viewer in recursive-landing dev branch, iframe integration
+> **Last Updated:** 2025-11-11 (Session 8 - Unified Viewer Architecture - COMPLETE ✅)
+> **Current Phase:** Phase 1 COMPLETE - Unified Content Viewer Built & Deployed
+> **Next Session:** User testing, then merge dev→main, deploy production, build admin dashboard
 
 ---
 
@@ -1109,23 +1109,40 @@ npx supabase db push
 - ✅ Dashboard shows both stories and playlists
 
 **Session 8 Accomplishments:**
-- ✅ **PIVOTED from Supabase Storage to URL-based approach**
+- ✅ **PIVOTED from Supabase Storage to URL-based approach** (Session 7)
   - Users provide image URLs (Google Drive, Imgur, etc.)
   - No hosting costs, users own their data
   - Auto-converts Drive sharing links to direct image URLs
-- ✅ **Built YouTube playlist creator** (`/dashboard/playlists/new`)
+- ✅ **Built YouTube playlist creator** (`/dashboard/playlists/new`) (Session 7)
   - Auto-extracts video IDs from any YouTube URL format
   - YouTube nocookie embeds (privacy-enhanced)
   - Same approval workflow as stories
-- ✅ **Auto-show preview after saving** - Preview automatically appears
-- ✅ **Investigated image rendering issues**
+- ✅ **Auto-show preview after saving** (Session 8)
+  - Preview automatically appears with `setShowPreview(true)`
+  - WYSIWYG experience for creators
+- ✅ **Investigated image rendering issues** (Session 8)
   - No old Supabase Storage code found (completely URL-based)
   - CORS issues with Drive/Imgur likely cause of rendering failures
   - Iframe approach should solve this
-- ✅ **UNIFIED VIEWER ARCHITECTURE DECIDED**
+- ✅ **UNIFIED VIEWER ARCHITECTURE DECIDED** (Session 8)
   - Stories + playlists merge into one content viewer
   - Both are just "sequences of content" (images vs videos)
   - Build in recursive-landing dev branch, iframe from creator
+- ✅ **Built unified content viewer** (`recursive-landing/pages/content/viewer.html`)
+  - Supports both Supabase (`?id=uuid&type=story|playlist`) and local JSON (`?story=slug`)
+  - Auto-detects content type: renders images OR videos
+  - YouTube nocookie embeds with `rel=0`, `modestbranding=1`
+  - All existing features: fullscreen, swipe, keyboard, wheel navigation
+  - 480 lines of vanilla JS with Supabase client integration
+- ✅ **Updated recursive-creator preview iframes**
+  - Story preview: Points to `dev.recursive.eco/pages/content/viewer.html?id={id}&type=story`
+  - Playlist preview: Points to `dev.recursive.eco/pages/content/viewer.html?id={id}&type=playlist`
+  - Replaced ~105 lines of inline preview code with ~12 lines of iframe
+  - Cleaner codebase, single source of truth for rendering
+- ✅ **Deployed dev branch to dev.recursive.eco**
+  - Dev branch `dev-unified-viewer` created and pushed
+  - Production stays stable on main branch
+  - Ready for testing
 
 **Key Insight:**
 Both stories and playlists are **sequences of content**. Instead of separate viewers:
@@ -1139,37 +1156,75 @@ Both stories and playlists are **sequences of content**. Instead of separate vie
 3. 🛡️ **Safer for Kids** - Bounded experience, can't navigate away
 4. 💬 **Community Reviews** - Trusted recommendations (future)
 
-**Next Steps - Unified Viewer Implementation:**
+**Session 8 Testing Instructions (PLEASE TEST!):**
 
-1. **Create dev branch in recursive-landing**
-   ```bash
-   cd ../recursive-landing
-   git checkout -b dev-unified-viewer
-   git push -u origin dev-unified-viewer
-   ```
+The unified viewer architecture is complete and deployed to `dev.recursive.eco`. Here's what to test:
 
-2. **Build unified content viewer**
-   - Copy `pages/stories/viewer.html` → `pages/content/viewer.html`
-   - Add Supabase client library (`@supabase/supabase-js`)
-   - Support URL params: `?id=uuid&type=story|playlist`
-   - Auto-detect content type: render images OR videos per item
-   - YouTube nocookie embeds: `rel=0`, `modestbranding=1`
-   - Keep all existing features: fullscreen, swipe, keyboard, wheel
+**Test 1: Story Creation with Drive/Imgur Images**
+1. Go to `creator.recursive.eco/dashboard/stories/new`
+2. Create a new story with:
+   - Title: "Test Story"
+   - Subtitle: "Testing Drive/Imgur images"
+   - Author: Your name
+3. Add pages with image URLs from:
+   - Google Drive (sharing link format)
+   - Imgur (direct link)
+   - Any other image hosting service
+4. Click "Save New Draft"
+5. **Check:** Does the preview automatically appear? ✅/❌
+6. **Check:** Do the images render correctly in the preview iframe? ✅/❌
+7. **Check:** Can you navigate between pages (swipe, arrows, keyboard)? ✅/❌
+8. **Check:** Does fullscreen mode work? ✅/❌
 
-3. **Deploy dev branch to `dev.recursive.eco`**
-   - Dev branch accessible at: https://dev.recursive.eco
-   - Production stays stable on main branch
+**Test 2: Playlist Creation with YouTube Videos**
+1. Go to `creator.recursive.eco/dashboard/playlists/new`
+2. Create a new playlist with:
+   - Title: "Test Playlist"
+   - Description: "Testing YouTube embeds"
+   - Category: "Kids"
+3. Add videos with various YouTube URL formats:
+   - `https://youtube.com/watch?v=VIDEO_ID`
+   - `https://youtu.be/VIDEO_ID`
+   - Direct video ID: `VIDEO_ID`
+4. Click "Save Playlist"
+5. **Check:** Does the preview automatically appear? ✅/❌
+6. **Check:** Do the videos embed correctly? ✅/❌
+7. **Check:** Are related videos hidden (clean YouTube UX)? ✅/❌
+8. **Check:** Can you navigate between videos? ✅/❌
 
-4. **Update recursive-creator preview iframes**
-   - Stories: `<iframe src="https://dev.recursive.eco/pages/content/viewer.html?id={id}&type=story" />`
-   - Playlists: `<iframe src="https://dev.recursive.eco/pages/content/viewer.html?id={id}&type=playlist" />`
-   - Test Drive/Imgur images (should solve CORS issue)
-   - Test YouTube embeds with clean UX
+**Test 3: CORS Issue Resolution**
+1. Use a Google Drive image that previously failed to render
+2. Create a story with that image
+3. **Check:** Does it render in the iframe preview? ✅/❌
+4. **Expected:** Iframe should solve CORS issues (if not, we'll need proxy)
 
-5. **Merge to main when stable**
-   - Test thoroughly on dev branch
-   - Update production iframe URLs to point to main
-   - Update recursive.eco domain to serve from main
+**Test 4: Navigation & UX**
+1. In both story and playlist previews:
+2. **Check:** Swipe left/right works on mobile? ✅/❌
+3. **Check:** Keyboard arrow keys work? ✅/❌
+4. **Check:** Mouse wheel scrolling works? ✅/❌
+5. **Check:** Fullscreen button works? ✅/❌
+6. **Check:** Page counter shows correctly? ✅/❌
+
+**Expected Results:**
+- ✅ Preview auto-shows after saving
+- ✅ Drive/Imgur images render (CORS solved by iframe)
+- ✅ YouTube videos embed cleanly (no related videos)
+- ✅ All navigation methods work (swipe, keyboard, wheel)
+- ✅ Fullscreen mode works
+- ✅ Mobile-responsive design
+
+**If Issues Found:**
+1. Take screenshots of errors
+2. Check browser console for error messages
+3. Note which specific images/videos fail
+4. We'll debug together in next session
+
+**Next Steps After Testing:**
+1. If all tests pass → Merge dev branch to main in recursive-landing
+2. Update iframe URLs in recursive-creator to point to main (recursive.eco)
+3. Deploy to production
+4. Move to Phase 2: Admin dashboard for story approval
 
 **Current Files:**
 - ✅ `app/dashboard/stories/new/page.tsx` - URL-based story creator
