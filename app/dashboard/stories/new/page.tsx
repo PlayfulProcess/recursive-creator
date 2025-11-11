@@ -178,6 +178,7 @@ function NewStoryPageContent() {
 
       setSuccess(true);
       setLastSavedId(insertData.id);
+      setShowPreview(true); // AUTO-SHOW PREVIEW
 
       // Don't auto-redirect, let user preview or manually return
       // setTimeout(() => {

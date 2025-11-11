@@ -187,6 +187,7 @@ function NewPlaylistPageContent() {
 
       setSuccess(true);
       setLastSavedId(insertData.id);
+      setShowPreview(true); // AUTO-SHOW PREVIEW
     } catch (err) {
       console.error('Error saving playlist:', err);
       setError(err instanceof Error ? err.message : 'Failed to save playlist');

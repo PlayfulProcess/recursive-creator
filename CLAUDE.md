@@ -1,8 +1,8 @@
 # Context for Claude Code: Recursive Creator Project
 
-> **Last Updated:** 2025-11-10 (Session 7 Continued)
-> **Current Phase:** Phase 1 IN PROGRESS - Story Upload Forge Built ✅
-> **Next Session:** Add iframe preview, build admin dashboard
+> **Last Updated:** 2025-11-11 (Session 8 - Unified Viewer Architecture)
+> **Current Phase:** Phase 1 IN PROGRESS - Pivoting to Unified Content Viewer ✅
+> **Next Session:** Build unified viewer in recursive-landing dev branch, iframe integration
 
 ---
 
@@ -55,8 +55,17 @@ LOOP: Cultural change emerges
 
 ## What We're Building (Tools for the Collective)
 
-1. **Story Publisher** - Parents upload images to create children's books (not just PlayfulProcess)
-2. **Playlist Wrapper** - Community curates YouTube playlists for kids (privacy-enhanced)
+1. **Content Sequence Creator** - Parents/creators upload image stories + curated YouTube playlists with narrative context
+   - Stories: Image sequences with text (children's books, visual narratives)
+   - Playlists: YouTube videos wrapped in safer, calmer UX with narrative pauses
+   - **Unified Viewer**: Both use same beautiful viewer (images + videos mixed together)
+
+2. **YouTube Wrapper Value** - Why wrap playlists instead of using native YouTube?
+   - 🎭 **Narrative Context**: Add story pages before/after videos, create "chapters"
+   - 🧹 **Clean Embeds**: Hide related videos, remove search, no autoplay chaos
+   - 🛡️ **Safer for Kids**: Bounded experience, can't click away to random videos
+   - 💬 **Community Reviews**: Trusted recommendations within recursive.eco (future)
+
 3. **Account Hub** - Unified dashboard for all Recursive.eco content
 4. **Future: Existential Tarot** - Contemplation tool (Tillich meets digital culture, ontoject path)
 5. **Future: AI Contemplation Limits** - Introspection prompts after 10 AI attempts (hospicing modernity practice)
@@ -203,7 +212,68 @@ if (storyId) {
 }
 ```
 
-### 3. Design Philosophy: Forges for Mortals
+### 3. Unified Content Viewer Architecture (DECIDED 2025-11-11) ✅
+
+**Question:** Should stories and playlists have separate viewers, or one unified viewer?
+
+**Answer:** Unified viewer! Both are just sequences of content.
+
+**Why (Toolmaker Perspective):**
+- ✅ **Same essence**: Stories = image sequences, Playlists = video sequences
+- ✅ **Future-proof**: Can mix images + videos in same sequence later
+- ✅ **One codebase**: Update viewer once, benefits all content types
+- ✅ **Consistent UX**: Users learn one interface, works for everything
+- ✅ **Mobile-optimized**: Responsive design for both images and videos
+- ✅ **Solves CORS**: Iframe loads from recursive.eco domain (not creator.recursive.eco)
+
+**Solution:**
+- **recursive-landing dev branch**: Build unified content viewer at `dev.recursive.eco`
+- **Viewer features**: Fullscreen, swipe, keyboard nav, wheel scroll (existing)
+- **Video support**: YouTube nocookie embeds (rel=0, modestbranding=1)
+- **Supabase integration**: Fetch content via `?id=uuid&type=story|playlist`
+- **Clean YouTube UX**: Hide recommendations, no search, bounded experience
+
+**Data Structure (Keep Separate for MVP):**
+```json
+{
+  "document_type": "story" | "playlist",
+  "document_data": {
+    "pages": [...],    // For stories
+    "videos": [...]    // For playlists
+  }
+}
+```
+
+**Future Enhancement (Unified Items Array):**
+```json
+{
+  "document_type": "sequence",
+  "document_data": {
+    "items": [
+      { "type": "image", "image_url": "...", "text": "..." },
+      { "type": "video", "video_id": "...", "title": "..." },
+      { "type": "image", "image_url": "...", "text": "..." }
+    ]
+  }
+}
+```
+
+**Development Workflow:**
+1. Create `dev-unified-viewer` branch in recursive-landing
+2. Copy `pages/stories/viewer.html` → `pages/content/viewer.html`
+3. Add video support + Supabase client
+4. Deploy dev branch to `dev.recursive.eco`
+5. Update recursive-creator preview iframes to point to dev viewer
+6. Test Drive/Imgur images + YouTube videos
+7. Merge to main when stable
+
+**YouTube Wrapper Benefits:**
+1. 🎭 **Narrative Context** - Add story pages between videos
+2. 🧹 **Clean Embeds** - No related videos at end (youtube-nocookie.com)
+3. 🛡️ **Safer for Kids** - Can't navigate to random YouTube content
+4. 💬 **Community Reviews** - Trusted recommendations (future)
+
+### 4. Design Philosophy: Forges for Mortals
 
 **The Vulcan Principle:** Tools must be simple enough for non-technical creators to wield.
 
@@ -1026,52 +1096,87 @@ npx supabase db push
 
 ---
 
-## Current Session Context (Session 7 - Continued)
+## Current Session Context (Session 8 - Unified Viewer Architecture)
 
-**Date:** 2025-11-10
-**Focus Part 1:** Create story approval migration + PIVOT to match existing pattern
-**Focus Part 2:** Build story upload forge with image management
+**Date:** 2025-11-11
+**Focus:** Pivot from Supabase Storage to URL-based approach, build YouTube playlist creator, plan unified viewer
 
-**Accomplishments (Migration):**
-- ✅ Reviewed Supabase AI recommendations
-- ✅ Created initial migration (001-story-approval.sql)
-- ✅ **DISCOVERED:** Tools/channels already have approval pattern!
-- ✅ **PIVOTED:** Revised migration to match existing JSONB-heavy approach
-- ✅ Created APPROVAL_PATTERN.md (documents the Recursive.eco way)
-- ✅ Created revised migration (001-story-approval-revised.sql)
-- ✅ Created RECOMMENDATION-REVISED.md (explains the pivot)
-- ✅ Created revised guide (README-REVISED.md)
-- ✅ Created BACKLOG_DB_OPTIMIZATIONS.md (future improvements)
-- ✅ User RAN migration + bootstrapped admin (pp@playfulprocess.com)
+**Previous Session Summary (Session 7):**
+- ✅ Built story/playlist upload forges with URL-based storage (no file uploads!)
+- ✅ Added Google Drive URL auto-conversion
+- ✅ Created YouTube playlist wrapper with video embeds
+- ✅ Added 'playlist' to document_types (migration 002-add-playlist-type.sql)
+- ✅ Dashboard shows both stories and playlists
 
-**Accomplishments (Story Upload Forge):**
-- ✅ Built `/dashboard/stories/new` page (3.9 kB)
-- ✅ Title, subtitle, author form fields
-- ✅ Multiple image upload with file picker
-- ✅ Image preview thumbnails (24x24)
-- ✅ Page reordering (up/down arrows)
-- ✅ Page removal
-- ✅ Alt text and narration inputs for each page
-- ✅ Upload images to Supabase Storage (`story-images/{user_id}/{doc_id}/`)
-- ✅ Save to user_documents with `is_active: 'false'` (pending)
-- ✅ Dashboard navigation with "Create New Story" button
-- ✅ Build tested and passing
-- ✅ Pushed to GitHub (commits 846e6ac, f9f2364)
+**Session 8 Accomplishments:**
+- ✅ **PIVOTED from Supabase Storage to URL-based approach**
+  - Users provide image URLs (Google Drive, Imgur, etc.)
+  - No hosting costs, users own their data
+  - Auto-converts Drive sharing links to direct image URLs
+- ✅ **Built YouTube playlist creator** (`/dashboard/playlists/new`)
+  - Auto-extracts video IDs from any YouTube URL format
+  - YouTube nocookie embeds (privacy-enhanced)
+  - Same approval workflow as stories
+- ✅ **Auto-show preview after saving** - Preview automatically appears
+- ✅ **Investigated image rendering issues**
+  - No old Supabase Storage code found (completely URL-based)
+  - CORS issues with Drive/Imgur likely cause of rendering failures
+  - Iframe approach should solve this
+- ✅ **UNIFIED VIEWER ARCHITECTURE DECIDED**
+  - Stories + playlists merge into one content viewer
+  - Both are just "sequences of content" (images vs videos)
+  - Build in recursive-landing dev branch, iframe from creator
 
-**Key Learning:**
-- Supabase AI gave generic best practices (columns-based approval)
-- But our codebase uses JSONB-heavy pattern (is_active controls visibility)
-- Revised to be consistent with tools/channels
-- **Domain knowledge > generic advice**
+**Key Insight:**
+Both stories and playlists are **sequences of content**. Instead of separate viewers:
+- One unified viewer handles images AND videos
+- YouTube wrapper provides: narrative context, clean embeds, safer UX, community reviews
+- Future: Mix images + videos in same sequence (story page → video → story page)
 
-**What User Can Do Now:**
-1. ✅ **Test story creation** at https://creator.recursive.eco/dashboard/stories/new
-   - Create a test story with images
-   - Verify images upload to Supabase Storage
-   - Check story appears in user_documents table
-2. **Next:** Add iframe preview to creation page (WYSIWYG experience)
-3. **Next:** Build "My Stories" list on dashboard
-4. **Next:** Build admin approval dashboard (/admin/stories)
+**YouTube Wrapper Value Proposition:**
+1. 🎭 **Narrative Context** - Add story pages before/after videos as "chapters"
+2. 🧹 **Clean YouTube Embeds** - Hide related videos (youtube-nocookie.com, rel=0)
+3. 🛡️ **Safer for Kids** - Bounded experience, can't navigate away
+4. 💬 **Community Reviews** - Trusted recommendations (future)
+
+**Next Steps - Unified Viewer Implementation:**
+
+1. **Create dev branch in recursive-landing**
+   ```bash
+   cd ../recursive-landing
+   git checkout -b dev-unified-viewer
+   git push -u origin dev-unified-viewer
+   ```
+
+2. **Build unified content viewer**
+   - Copy `pages/stories/viewer.html` → `pages/content/viewer.html`
+   - Add Supabase client library (`@supabase/supabase-js`)
+   - Support URL params: `?id=uuid&type=story|playlist`
+   - Auto-detect content type: render images OR videos per item
+   - YouTube nocookie embeds: `rel=0`, `modestbranding=1`
+   - Keep all existing features: fullscreen, swipe, keyboard, wheel
+
+3. **Deploy dev branch to `dev.recursive.eco`**
+   - Dev branch accessible at: https://dev.recursive.eco
+   - Production stays stable on main branch
+
+4. **Update recursive-creator preview iframes**
+   - Stories: `<iframe src="https://dev.recursive.eco/pages/content/viewer.html?id={id}&type=story" />`
+   - Playlists: `<iframe src="https://dev.recursive.eco/pages/content/viewer.html?id={id}&type=playlist" />`
+   - Test Drive/Imgur images (should solve CORS issue)
+   - Test YouTube embeds with clean UX
+
+5. **Merge to main when stable**
+   - Test thoroughly on dev branch
+   - Update production iframe URLs to point to main
+   - Update recursive.eco domain to serve from main
+
+**Current Files:**
+- ✅ `app/dashboard/stories/new/page.tsx` - URL-based story creator
+- ✅ `app/dashboard/playlists/new/page.tsx` - YouTube playlist creator
+- ✅ `app/dashboard/page.tsx` - Dashboard with both stories and playlists
+- ✅ `supabase/migrations/002-add-playlist-type.sql` - Playlist document type
+- ⏳ `recursive-landing/pages/content/viewer.html` - To be created in dev branch
 
 **Supabase Email Template (Magic Link + OTP):**
 
