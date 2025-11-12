@@ -130,7 +130,7 @@ export default function SequenceViewer({
         {currentItem.type === 'image' ? (
           <div className="w-full h-full flex flex-col items-center justify-center p-4">
             <img
-              src={currentItem.image_url}
+              src={`/api/proxy-image?url=${encodeURIComponent(currentItem.image_url || '')}`}
               alt={currentItem.alt_text || `Item ${currentItem.position}`}
               className="max-w-full max-h-full object-contain rounded-lg"
             />
