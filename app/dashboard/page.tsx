@@ -226,30 +226,30 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-gray-50">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-8">
-        {/* Sequences Section - NEW! Mix images + videos */}
+        {/* Projects Section - NEW! Mix images + videos */}
         <div className="bg-white rounded-lg shadow p-6 border-2 border-green-200">
           <div className="flex justify-between items-center mb-6">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">My Sequences</h2>
+              <h2 className="text-2xl font-bold text-gray-900">My Projects</h2>
               <p className="text-sm text-gray-600 mt-1">Mix images and videos in any order</p>
             </div>
             <button
               onClick={() => router.push('/dashboard/sequences/new')}
               className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors"
             >
-              Create New Sequence
+              Create New Project
             </button>
           </div>
 
           {loading ? (
-            <p className="text-gray-600 text-sm">Loading sequences...</p>
+            <p className="text-gray-600 text-sm">Loading projects...</p>
           ) : sequences.length === 0 ? (
             <div className="text-center py-8 bg-green-50 rounded-lg">
               <p className="text-gray-600 text-sm mb-2">
-                You haven't created any sequences yet.
+                You haven't created any projects yet.
               </p>
               <p className="text-gray-500 text-xs">
-                Sequences let you mix images and videos to create rich multimedia experiences!
+                Projects let you mix images and videos to create rich multimedia experiences!
               </p>
             </div>
           ) : (

@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase-client';
+import SequenceViewer from '@/components/viewers/SequenceViewer';
 
 const MAX_ITEMS = 50; // Security limit
 
@@ -33,12 +34,12 @@ function NewSequencePageContent() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [items, setItems] = useState<SequenceItem[]>([]);
+  const [bulkUrls, setBulkUrls] = useState('');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [lastSavedId, setLastSavedId] = useState<string | null>(null);
-  const [showAddMenu, setShowAddMenu] = useState(false);
 
   // Load sequence data when editing
   useEffect(() => {
@@ -66,8 +67,8 @@ function NewSequencePageContent() {
         setItems(data.document_data.items);
       }
     } catch (err) {
-      console.error('Error loading sequence:', err);
-      setError('Failed to load sequence');
+      console.error('Error loading project:', err);
+      setError('Failed to load project');
     } finally {
       setLoading(false);
     }
@@ -118,67 +119,97 @@ function NewSequencePageContent() {
     return url;
   };
 
-  const handleAddImage = () => {
-    if (items.length >= MAX_ITEMS) {
-      setError(`Maximum ${MAX_ITEMS} items allowed`);
-      return;
+  const detectUrlType = (url: string): { type: ItemType; processedUrl: string } => {
+    const trimmedUrl = url.trim();
+
+    // YouTube detection
+    if (trimmedUrl.includes('youtube.com') || trimmedUrl.includes('youtu.be')) {
+      return { type: 'video', processedUrl: trimmedUrl };
     }
-    setItems([...items, {
-      position: items.length + 1,
-      type: 'image',
-      image_url: '',
-      alt_text: '',
-      narration: ''
-    }]);
-    setShowAddMenu(false);
+
+    // Drive detection - default to image, but could be video
+    if (trimmedUrl.includes('drive.google.com')) {
+      // For now, assume images. Could enhance to detect file type later
+      return { type: 'image', processedUrl: trimmedUrl };
+    }
+
+    // Default to image for other URLs
+    return { type: 'image', processedUrl: trimmedUrl };
   };
 
-  const handleAddVideo = () => {
-    if (items.length >= MAX_ITEMS) {
-      setError(`Maximum ${MAX_ITEMS} items allowed`);
+  const handleParseBulkUrls = () => {
+    if (!bulkUrls.trim()) return;
+
+    const lines = bulkUrls.split(/[\n,]+/).filter(line => line.trim());
+
+    if (items.length + lines.length > MAX_ITEMS) {
+      setError(`Maximum ${MAX_ITEMS} items allowed. You're trying to add ${lines.length} items to ${items.length} existing items.`);
       return;
     }
-    setItems([...items, {
-      position: items.length + 1,
-      type: 'video',
-      video_id: '',
-      url: '',
-      title: ''
-    }]);
-    setShowAddMenu(false);
+
+    const newItems: SequenceItem[] = [];
+
+    lines.forEach((line, index) => {
+      const { type, processedUrl } = detectUrlType(line);
+
+      if (type === 'video') {
+        const videoId = extractYouTubeId(processedUrl);
+        newItems.push({
+          position: items.length + index + 1,
+          type: 'video',
+          video_id: videoId,
+          url: processedUrl,
+          title: ''
+        });
+      } else {
+        const convertedUrl = convertGoogleDriveUrl(processedUrl);
+        newItems.push({
+          position: items.length + index + 1,
+          type: 'image',
+          image_url: convertedUrl,
+          alt_text: '',
+          narration: ''
+        });
+      }
+    });
+
+    setItems([...items, ...newItems]);
+    setBulkUrls(''); // Clear textarea after adding
+    setError(null);
   };
 
-  const handleRemoveItem = (index: number) => {
-    const newItems = items.filter((_, i) => i !== index);
+  const handleReorderItem = (currentIndex: number, newPosition: number) => {
+    const pos = parseInt(String(newPosition));
+
+    // Validate
+    if (isNaN(pos) || pos < 1 || pos > items.length) {
+      return;
+    }
+
+    // Same position, no change
+    if (pos === currentIndex + 1) {
+      return;
+    }
+
+    // Reorder: remove from old position, insert at new position
+    const newItems = [...items];
+    const [movedItem] = newItems.splice(currentIndex, 1);
+    newItems.splice(pos - 1, 0, movedItem);
+
+    // Renumber all items
     newItems.forEach((item, i) => item.position = i + 1);
     setItems(newItems);
   };
 
-  const handleMoveItem = (index: number, direction: 'up' | 'down') => {
-    if (direction === 'up' && index === 0) return;
-    if (direction === 'down' && index === items.length - 1) return;
-
-    const newItems = [...items];
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    [newItems[index], newItems[targetIndex]] = [newItems[targetIndex], newItems[index]];
-
+  const handleDeleteItem = (index: number) => {
+    const newItems = items.filter((_, i) => i !== index);
     newItems.forEach((item, i) => item.position = i + 1);
     setItems(newItems);
   };
 
   const handleItemChange = (index: number, field: string, value: string) => {
     const newItems = [...items];
-    const item = newItems[index];
-
-    if (field === 'image_url') {
-      item.image_url = convertGoogleDriveUrl(value);
-    } else if (field === 'url') {
-      item.url = value;
-      item.video_id = extractYouTubeId(value);
-    } else {
-      (item as any)[field] = value;
-    }
-
+    (newItems[index] as any)[field] = value;
     setItems(newItems);
   };
 
@@ -246,8 +277,8 @@ function NewSequencePageContent() {
       setSuccess(true);
       setLastSavedId(insertData.id);
     } catch (err) {
-      console.error('Error saving sequence:', err);
-      setError(err instanceof Error ? err.message : 'Failed to save sequence');
+      console.error('Error saving project:', err);
+      setError(err instanceof Error ? err.message : 'Failed to save project');
     } finally {
       setSaving(false);
     }
@@ -266,277 +297,216 @@ function NewSequencePageContent() {
                 ← Back
               </button>
               <h1 className="text-xl font-bold text-white">
-                {editingId ? 'Edit Sequence' : 'Create Content Sequence'}
+                {editingId ? 'Edit Project' : 'Create New Project'}
               </h1>
             </div>
           </div>
         </div>
       </nav>
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-gray-800 rounded-lg shadow-lg p-8">
-          {success && (
-            <div className="mb-6 bg-green-900/50 border border-green-700 rounded-lg p-4">
-              <p className="text-green-200">
-                Sequence saved successfully!
-              </p>
-            </div>
-          )}
-
-          {error && (
-            <div className="mb-6 bg-red-900/50 border border-red-700 rounded-lg p-4">
-              <p className="text-red-200">{error}</p>
-            </div>
-          )}
-
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="space-y-8">
           {/* Metadata */}
-          <div className="space-y-6 mb-8">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Title *
-              </label>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Bedtime Routine Guide"
-              />
-            </div>
+          <div className="bg-gray-800 rounded-lg shadow-lg p-6">
+            {success && (
+              <div className="mb-6 bg-green-900/50 border border-green-700 rounded-lg p-4">
+                <p className="text-green-200">
+                  Project saved successfully!
+                </p>
+              </div>
+            )}
 
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Description
-              </label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={3}
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="A calming sequence mixing images and videos..."
-              />
+            {error && (
+              <div className="mb-6 bg-red-900/50 border border-red-700 rounded-lg p-4">
+                <p className="text-red-200">{error}</p>
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Title *
+                </label>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="My Project"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Description
+                </label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={2}
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="A brief description..."
+                />
+              </div>
             </div>
           </div>
 
-          {/* Items */}
-          <div className="mb-8">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-white">Content Items</h2>
-              <div className="relative">
-                <button
-                  onClick={() => setShowAddMenu(!showAddMenu)}
-                  disabled={items.length >= MAX_ITEMS}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
-                >
-                  + Add Content ▼
-                </button>
-                {showAddMenu && (
-                  <div className="absolute right-0 mt-2 w-48 bg-gray-700 rounded-lg shadow-lg z-10 border border-gray-600">
-                    <button
-                      onClick={handleAddImage}
-                      className="w-full px-4 py-2 text-left text-white hover:bg-gray-600 rounded-t-lg flex items-center"
-                    >
-                      <span className="mr-2">📷</span> Add Image
-                    </button>
-                    <button
-                      onClick={handleAddVideo}
-                      className="w-full px-4 py-2 text-left text-white hover:bg-gray-600 rounded-b-lg flex items-center"
-                    >
-                      <span className="mr-2">🎥</span> Add Video
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="mb-4">
-              <p className="text-sm text-gray-400">
-                Mix images and videos in any order. Items: {items.length}/{MAX_ITEMS}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                ✨ Google Drive and YouTube links auto-convert to proper formats
-              </p>
-            </div>
-
-            {items.length === 0 ? (
-              <div className="text-center py-12 text-gray-500">
-                <p>No items yet. Click "+ Add Content" to start.</p>
-              </div>
-            ) : (
+          {/* Main Content Area - Two Columns */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Left: Bulk URL Input */}
+            <div className="lg:col-span-2 bg-gray-800 rounded-lg shadow-lg p-6">
+              <h2 className="text-lg font-semibold text-white mb-4">Add Content</h2>
               <div className="space-y-4">
-                {items.map((item, index) => (
-                  <div
-                    key={index}
-                    className="bg-gray-700 rounded-lg p-4 border border-gray-600"
-                  >
-                    <div className="flex items-start gap-4">
-                      <div className="flex-shrink-0">
-                        <div className="w-12 h-12 bg-gray-600 rounded flex items-center justify-center text-white font-bold">
-                          {item.position}
-                        </div>
-                        <div className="text-center mt-1 text-xs text-gray-400">
-                          {item.type === 'image' ? '📷' : '🎥'}
-                        </div>
-                      </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Paste URLs (one per line or comma-separated)
+                  </label>
+                  <textarea
+                    value={bulkUrls}
+                    onChange={(e) => setBulkUrls(e.target.value)}
+                    rows={8}
+                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                    placeholder="https://drive.google.com/file/d/...&#10;https://youtube.com/watch?v=...&#10;https://drive.google.com/file/d/..."
+                  />
+                  <p className="text-xs text-gray-500 mt-2">
+                    ✨ Auto-detects: Google Drive (images/videos), YouTube videos
+                  </p>
+                </div>
+                <button
+                  onClick={handleParseBulkUrls}
+                  disabled={!bulkUrls.trim() || items.length >= MAX_ITEMS}
+                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Parse & Add URLs →
+                </button>
+              </div>
+            </div>
 
-                      <div className="flex-1 space-y-3">
-                        {item.type === 'image' ? (
-                          <>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-300 mb-2">
-                                Image URL
-                              </label>
-                              <input
-                                type="text"
-                                value={item.image_url || ''}
-                                onChange={(e) => handleItemChange(index, 'image_url', e.target.value)}
-                                className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                placeholder="https://drive.google.com/..."
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-300 mb-2">
-                                Alt Text (optional)
-                              </label>
-                              <input
-                                type="text"
-                                value={item.alt_text || ''}
-                                onChange={(e) => handleItemChange(index, 'alt_text', e.target.value)}
-                                className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                placeholder="Cover page"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-300 mb-2">
-                                Narration (optional)
-                              </label>
-                              <textarea
-                                value={item.narration || ''}
-                                onChange={(e) => handleItemChange(index, 'narration', e.target.value)}
-                                rows={2}
-                                className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                placeholder="Welcome to bedtime..."
-                              />
-                            </div>
-                            {item.image_url && (
-                              <div className="mt-3">
-                                <img
-                                  src={`/api/proxy-image?url=${encodeURIComponent(item.image_url)}`}
-                                  alt={item.alt_text || `Item ${item.position}`}
-                                  className="max-w-xs max-h-32 rounded border border-gray-600"
-                                  onError={(e) => {
-                                    e.currentTarget.style.display = 'none';
-                                  }}
-                                />
-                              </div>
-                            )}
-                          </>
-                        ) : (
-                          <>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-300 mb-2">
-                                YouTube URL
-                              </label>
-                              <input
-                                type="text"
-                                value={item.url || ''}
-                                onChange={(e) => handleItemChange(index, 'url', e.target.value)}
-                                className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                placeholder="https://youtube.com/watch?v=..."
-                              />
-                              {item.video_id && item.video_id !== item.url && (
-                                <p className="text-xs text-green-400 mt-1">
-                                  ✓ Video ID: {item.video_id}
-                                </p>
-                              )}
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-300 mb-2">
-                                Title (optional)
-                              </label>
-                              <input
-                                type="text"
-                                value={item.title || ''}
-                                onChange={(e) => handleItemChange(index, 'title', e.target.value)}
-                                className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                placeholder="Calming music"
-                              />
-                            </div>
-                            {item.video_id && item.video_id.length === 11 && (
-                              <div className="mt-3">
-                                <img
-                                  src={`https://img.youtube.com/vi/${item.video_id}/mqdefault.jpg`}
-                                  alt={item.title || `Video ${item.position}`}
-                                  className="max-w-xs rounded border border-gray-600"
-                                  onError={(e) => {
-                                    e.currentTarget.style.display = 'none';
-                                  }}
-                                />
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </div>
+            {/* Right: Scrollable Sidebar with Items */}
+            <div className="bg-gray-800 rounded-lg shadow-lg p-6">
+              <h2 className="text-lg font-semibold text-white mb-4">
+                Items ({items.length}/{MAX_ITEMS})
+              </h2>
 
-                      <div className="flex-shrink-0 flex flex-col gap-2">
+              {items.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <p className="text-sm">No items yet</p>
+                  <p className="text-xs mt-1">Paste URLs to get started</p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
+                  {items.map((item, index) => (
+                    <div
+                      key={index}
+                      className="bg-gray-700 rounded-lg p-3 border border-gray-600"
+                    >
+                      <div className="flex items-start gap-2 mb-2">
+                        {/* Number Input */}
+                        <input
+                          type="number"
+                          min="1"
+                          max={items.length}
+                          value={item.position}
+                          onChange={(e) => handleReorderItem(index, parseInt(e.target.value))}
+                          className="w-14 px-2 py-1 bg-gray-600 border border-gray-500 rounded text-white text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+
+                        {/* Type Icon */}
+                        <div className="flex-shrink-0 w-8 h-8 bg-gray-600 rounded flex items-center justify-center">
+                          <span className="text-lg">{item.type === 'image' ? '📷' : '🎥'}</span>
+                        </div>
+
+                        {/* Delete Button */}
                         <button
-                          onClick={() => handleMoveItem(index, 'up')}
-                          disabled={index === 0}
-                          className="px-2 py-1 bg-gray-600 text-white rounded hover:bg-gray-500 disabled:opacity-30 text-sm"
-                          title="Move up"
-                        >
-                          ↑
-                        </button>
-                        <button
-                          onClick={() => handleMoveItem(index, 'down')}
-                          disabled={index === items.length - 1}
-                          className="px-2 py-1 bg-gray-600 text-white rounded hover:bg-gray-500 disabled:opacity-30 text-sm"
-                          title="Move down"
-                        >
-                          ↓
-                        </button>
-                        <button
-                          onClick={() => handleRemoveItem(index)}
-                          className="px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
-                          title="Remove"
+                          onClick={() => handleDeleteItem(index)}
+                          className="ml-auto px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-xs"
                         >
                           ×
                         </button>
                       </div>
+
+                      {/* Thumbnail */}
+                      {item.type === 'image' && item.image_url && (
+                        <img
+                          src={`/api/proxy-image?url=${encodeURIComponent(item.image_url)}`}
+                          alt={item.alt_text || `Item ${item.position}`}
+                          className="w-full h-20 object-cover rounded border border-gray-600 mb-2"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      )}
+                      {item.type === 'video' && item.video_id && item.video_id.length === 11 && (
+                        <img
+                          src={`https://img.youtube.com/vi/${item.video_id}/mqdefault.jpg`}
+                          alt={item.title || `Video ${item.position}`}
+                          className="w-full h-20 object-cover rounded border border-gray-600 mb-2"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      )}
+
+                      {/* Quick Edit Fields */}
+                      {item.type === 'image' && (
+                        <input
+                          type="text"
+                          value={item.alt_text || ''}
+                          onChange={(e) => handleItemChange(index, 'alt_text', e.target.value)}
+                          placeholder="Alt text (optional)"
+                          className="w-full px-2 py-1 bg-gray-600 border border-gray-500 rounded text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                      )}
+                      {item.type === 'video' && (
+                        <input
+                          type="text"
+                          value={item.title || ''}
+                          onChange={(e) => handleItemChange(index, 'title', e.target.value)}
+                          placeholder="Title (optional)"
+                          className="w-full px-2 py-1 bg-gray-600 border border-gray-500 rounded text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                      )}
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Actions */}
-          <div className="flex gap-4">
-            <button
-              onClick={handleSaveDraft}
-              disabled={saving || !title.trim() || items.length === 0}
-              className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {saving ? 'Saving...' : 'Save Sequence'}
-            </button>
+          <div className="bg-gray-800 rounded-lg shadow-lg p-6">
+            <div className="flex gap-4">
+              <button
+                onClick={handleSaveDraft}
+                disabled={saving || !title.trim() || items.length === 0}
+                className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {saving ? 'Saving...' : 'Save Project'}
+              </button>
 
-            <button
-              onClick={() => router.push('/dashboard')}
-              disabled={saving}
-              className="px-6 py-3 bg-gray-700 text-gray-300 rounded-lg font-medium hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {lastSavedId ? 'Back to Dashboard' : 'Cancel'}
-            </button>
+              <button
+                onClick={() => router.push('/dashboard')}
+                disabled={saving}
+                className="px-6 py-3 bg-gray-700 text-gray-300 rounded-lg font-medium hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {lastSavedId ? 'Back to Dashboard' : 'Cancel'}
+              </button>
+            </div>
           </div>
 
-          <div className="mt-8 text-center">
-            <p className="text-gray-500 text-sm">
-              Building tools for the collective, one forge at a time. 🔨
-            </p>
-            <p className="text-gray-600 text-xs mt-2">
-              Mix images and videos to create rich multimedia experiences
-            </p>
-          </div>
+          {/* Live Preview */}
+          {items.length > 0 && (
+            <div className="bg-gray-800 rounded-lg shadow-lg p-6">
+              <h2 className="text-lg font-semibold text-white mb-4">Live Preview</h2>
+              <div className="rounded-lg overflow-hidden" style={{ height: '80vh' }}>
+                <SequenceViewer
+                  title={title || 'Untitled Project'}
+                  description={description}
+                  items={items}
+                />
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </div>
