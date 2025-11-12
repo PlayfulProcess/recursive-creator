@@ -39,7 +39,6 @@ function NewSequencePageContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [lastSavedId, setLastSavedId] = useState<string | null>(null);
 
   // Load sequence data when editing
   useEffect(() => {
@@ -85,6 +84,28 @@ function NewSequencePageContent() {
           return item;
         });
         setItems(cleanedItems);
+
+        // Populate bulkUrls textarea with existing URLs
+        const urlList = cleanedItems.map((item: SequenceItem) => {
+          if (item.type === 'video') {
+            // Check if it's Drive video (longer ID) or YouTube (11 chars)
+            if (item.video_id && item.video_id.length > 11) {
+              // Drive video
+              return `video: https://drive.google.com/file/d/${item.video_id}/view`;
+            } else if (item.url) {
+              // YouTube - use original URL if available
+              return item.url;
+            } else {
+              // YouTube - reconstruct from ID
+              return `https://youtube.com/watch?v=${item.video_id}`;
+            }
+          } else {
+            // Image
+            return item.image_url || '';
+          }
+        }).filter(url => url.trim() !== '');
+
+        setBulkUrls(urlList.join('\n'));
       }
     } catch (err) {
       console.error('Error loading project:', err);
@@ -329,7 +350,6 @@ function NewSequencePageContent() {
         if (updateError) throw updateError;
 
         setSuccess(true);
-        setLastSavedId(updateData.id);
       } else {
         // CREATE MODE: Insert new project
         const baseSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -358,7 +378,8 @@ function NewSequencePageContent() {
         if (insertError) throw insertError;
 
         setSuccess(true);
-        setLastSavedId(insertData.id);
+        // Transition to edit mode
+        router.push(`/dashboard/sequences/new?id=${insertData.id}`);
       }
     } catch (err) {
       console.error('Error saving project:', err);
@@ -420,7 +441,6 @@ function NewSequencePageContent() {
       if (insertError) throw insertError;
 
       setSuccess(true);
-      setLastSavedId(insertData.id);
       // Redirect to edit the new project
       router.push(`/dashboard/sequences/new?id=${insertData.id}`);
     } catch (err) {
@@ -635,19 +655,11 @@ function NewSequencePageContent() {
                 <button
                   onClick={handleSaveAsNew}
                   disabled={saving || !title.trim() || items.length === 0}
-                  className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  Save As New Project
+                  Save As New
                 </button>
               )}
-
-              <button
-                onClick={() => router.push('/dashboard')}
-                disabled={saving}
-                className="px-6 py-3 bg-gray-700 text-gray-300 rounded-lg font-medium hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {lastSavedId ? 'Back to Dashboard' : 'Cancel'}
-              </button>
             </div>
           </div>
 
