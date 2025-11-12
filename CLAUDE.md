@@ -1,8 +1,9 @@
 # Context for Claude Code: Recursive Creator Project
 
-> **Last Updated:** 2025-11-11 (Session 8 - Unified Viewer Architecture - COMPLETE ✅)
-> **Current Phase:** Phase 1 COMPLETE - Unified Content Viewer Built & Deployed
-> **Next Session:** User testing, then merge dev→main, deploy production, build admin dashboard
+> **Last Updated:** 2025-11-12 (Session 9 - Reset to bc6a9f9, trigger Vercel rebuild)
+> **Current Phase:** Phase 1 - Testing proxy/iframe solution with unified viewer
+> **Current Commit:** bc6a9f9 (proxy implementation with lh3.googleusercontent.com format)
+> **Next Steps:** Trigger Vercel rebuild, test Drive images, verify preview works
 
 ---
 
@@ -1096,7 +1097,62 @@ npx supabase db push
 
 ---
 
-## Current Session Context (Session 8 - Unified Viewer Architecture)
+## Current Session Context (Session 9 - Force Reset & Vercel Rebuild)
+
+**Date:** 2025-11-12
+**Focus:** Force reset to bc6a9f9 (proxy implementation), trigger Vercel rebuild to deploy
+
+**What Happened:**
+- User requested force restore to commit bc6a9f9
+- This is the version with proxy implementation (`/api/proxy-image/route.ts`)
+- Drive URLs converted to `https://lh3.googleusercontent.com/d/FILE_ID` format
+- Includes Imgur support
+- Preview iframe points to `dev.recursive.eco/pages/content/viewer.html`
+- Preview automatically shows after saving
+
+**Actions Taken:**
+1. ✅ `git reset --hard bc6a9f9` - Force reset local to bc6a9f9
+2. ✅ `git push origin dev --force` - Force pushed to remote
+3. ❌ Vercel did not rebuild (no file changes detected)
+
+**Next Steps:**
+1. ⏳ Update CLAUDE.md to trigger rebuild
+2. ⏳ Push change to trigger Vercel deployment
+3. ⏳ Test story creation with Drive images
+4. ⏳ Verify preview iframe loads correctly
+5. ⏳ Check if proxy solves CORS issues
+6. ⏳ Document what works and what doesn't
+
+**Current State:**
+- **Commit:** bc6a9f9 "Fix iframe embedding and image CORS issues - comprehensive solution"
+- **Branch:** dev
+- **Vercel Status:** Needs rebuild (force push didn't trigger deployment)
+
+**This Version Includes:**
+- Proxy API route at `/api/proxy-image/route.ts`
+- Google Drive URL conversion: sharing links → `lh3.googleusercontent.com/d/FILE_ID`
+- Imgur support in proxy (allows multiple domains)
+- Preview shows after saving (not before)
+- iframe preview points to unified viewer at dev.recursive.eco
+
+**Architecture:**
+```
+User pastes Drive sharing link
+  ↓
+convertGoogleDriveUrl() → lh3.googleusercontent.com/d/FILE_ID
+  ↓
+Wrapped in proxy: /api/proxy-image?url=...
+  ↓
+Saved to Supabase (proxied URL)
+  ↓
+Preview iframe loads from dev.recursive.eco
+  ↓
+Viewer fetches proxied images
+```
+
+---
+
+## Previous Session Context (Session 8 - Unified Viewer Architecture)
 
 **Date:** 2025-11-11
 **Focus:** Pivot from Supabase Storage to URL-based approach, build YouTube playlist creator, plan unified viewer
