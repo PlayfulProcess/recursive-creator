@@ -1,9 +1,9 @@
 # Context for Claude Code: Recursive Creator Project
 
-> **Last Updated:** 2025-11-12 (Session 9 - Reset to bc6a9f9, trigger Vercel rebuild)
-> **Current Phase:** Phase 1 - Testing proxy/iframe solution with unified viewer
-> **Current Commit:** bc6a9f9 (proxy implementation with lh3.googleusercontent.com format)
-> **Next Steps:** Trigger Vercel rebuild, test Drive images, verify preview works
+> **Last Updated:** 2025-11-12 (Session 9 - Unified Sequence Creator Built!)
+> **Current Phase:** Phase 4 COMPLETE - Ready for Phase 6 Testing
+> **Status:** Phases 1-4 complete, old tools still exist (safety net)
+> **Next Steps:** Test on Vercel, then Phase 5 cleanup (remove old files)
 
 ---
 
@@ -1097,58 +1097,83 @@ npx supabase db push
 
 ---
 
-## Current Session Context (Session 9 - Force Reset & Vercel Rebuild)
+## Current Session Context (Session 9 - Unified Sequence Creator Implementation)
 
 **Date:** 2025-11-12
-**Focus:** Force reset to bc6a9f9 (proxy implementation), trigger Vercel rebuild to deploy
+**Focus:** Build unified sequence creator (mix images + videos), mobile-first viewer, NO database changes
 
-**What Happened:**
-- User requested force restore to commit bc6a9f9
-- This is the version with proxy implementation (`/api/proxy-image/route.ts`)
-- Drive URLs converted to `https://lh3.googleusercontent.com/d/FILE_ID` format
-- Includes Imgur support
-- Preview iframe points to `dev.recursive.eco/pages/content/viewer.html`
-- Preview automatically shows after saving
+**Major Accomplishment:** Completed Phases 1-4 of unified sequence creator!
 
-**Actions Taken:**
-1. ✅ `git reset --hard bc6a9f9` - Force reset local to bc6a9f9
-2. ✅ `git push origin dev --force` - Force pushed to remote
-3. ❌ Vercel did not rebuild (no file changes detected)
+### What We Built:
 
-**Next Steps:**
-1. ⏳ Update CLAUDE.md to trigger rebuild
-2. ⏳ Push change to trigger Vercel deployment
-3. ⏳ Test story creation with Drive images
-4. ⏳ Verify preview iframe loads correctly
-5. ⏳ Check if proxy solves CORS issues
-6. ⏳ Document what works and what doesn't
+**Phase 1: Backend (NO DB CHANGES!)** ✅
+- Use existing `document_type: 'creative_work'` (already in database)
+- Identify sequences with `tool_slug: 'sequence'`
+- Zero migrations needed - works with existing schema!
+
+**Phase 2: Unified Creator UI** ✅
+- Created `/dashboard/sequences/new` - mix images AND videos
+- **Dropdown menu:** Add Image or Add Video
+- Type-specific inputs (alt text for images, title for videos)
+- Auto-convert Drive URLs → `uc?export=view&id=FILE_ID` format ✅ (user confirmed working!)
+- Auto-extract YouTube video IDs from any URL format
+- Reorder items with up/down arrows
+- Live thumbnails for both types
+- Proxy wrapping for CORS on Drive images
+
+**Phase 3: Mobile-First React Viewer** ✅
+- Created `/components/viewers/SequenceViewer.tsx`
+- **Design principle:** "If you can swipe through it like Instagram stories, it's simple enough"
+- Primary interaction: **Swipe left/right** (mobile)
+- Secondary: Keyboard arrows (desktop)
+- Large touch targets (56px buttons) - avoid hamburger menu issues
+- Minimal UI: page counter + fullscreen button at bottom
+- No complex overlays or menus in viewer
+- YouTube nocookie embeds with clean UI (`rel=0`, `modestbranding=1`)
+- Site header/navigation unchanged (hamburger stays for site nav)
+
+**Phase 4: Dashboard Integration** ✅
+- Added "My Sequences" section to dashboard (top, green highlight)
+- Fetch sequences: `tool_slug='sequence'` + `document_type='creative_work'`
+- Create/Edit/Delete functionality
+- Shows item count, date, status badges
+- Old stories/playlists sections still exist (safety net for Phase 6 testing)
+
+**Key Technical Decisions:**
+1. **NO database changes** - use existing creative_work type
+2. **Mobile-first viewer** - gestures > buttons, avoid touch issues
+3. **Test before cleanup** - keep old tools until sequences proven working
+4. **Drive format that works:** `https://drive.google.com/uc?export=view&id=FILE_ID`
+
+**Drive URL Fix (Session 9 start):**
+- Reset to bc6a9f9, then updated to use `uc?export=view` format
+- Removed Imgur references (focus on Drive)
+- User confirmed: "The google links are working!"
 
 **Current State:**
-- **Commit:** bc6a9f9 "Fix iframe embedding and image CORS issues - comprehensive solution"
-- **Branch:** dev
-- **Vercel Status:** Needs rebuild (force push didn't trigger deployment)
+- **Phases 1-4:** Complete and pushed to dev
+- **Phase 5:** Pending - cleanup old story/playlist files
+- **Phase 6:** Pending - testing on Vercel
+- **Strategy:** Test first, cleanup after (safety net approach)
 
-**This Version Includes:**
-- Proxy API route at `/api/proxy-image/route.ts`
-- Google Drive URL conversion: sharing links → `lh3.googleusercontent.com/d/FILE_ID`
-- Imgur support in proxy (allows multiple domains)
-- Preview shows after saving (not before)
-- iframe preview points to unified viewer at dev.recursive.eco
+**Files Created:**
+- `/app/dashboard/sequences/new/page.tsx` - Unified creator (562 lines)
+- `/components/viewers/SequenceViewer.tsx` - Mobile-first viewer (229 lines)
 
-**Architecture:**
-```
-User pastes Drive sharing link
-  ↓
-convertGoogleDriveUrl() → lh3.googleusercontent.com/d/FILE_ID
-  ↓
-Wrapped in proxy: /api/proxy-image?url=...
-  ↓
-Saved to Supabase (proxied URL)
-  ↓
-Preview iframe loads from dev.recursive.eco
-  ↓
-Viewer fetches proxied images
-```
+**Files Modified:**
+- `/app/dashboard/page.tsx` - Added sequences section
+- `/app/api/proxy-image/route.ts` - Removed Imgur, kept Drive
+- `/PROJECT_PLAN.md` - Documented full plan with 6 phases
+
+**Next Steps (Phase 6 Testing):**
+1. ✅ Commit and push to dev
+2. ✅ Update CLAUDE.md
+3. ⏳ User tests on Vercel
+4. ⏳ Verify Drive images load through proxy
+5. ⏳ Verify YouTube embeds work
+6. ⏳ Test mobile swipe navigation
+7. ⏳ If all good → Phase 5 cleanup (remove old files)
+8. ⏳ If issues → debug with safety net (old code still exists)
 
 ---
 
