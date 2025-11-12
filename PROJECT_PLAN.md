@@ -209,14 +209,21 @@ Even admin tools should be beautiful. The forge itself deserves craft. 🔨
 #### Phase 3: React Viewer Component (3-4 hours)
 **Create:** `/components/viewers/SequenceViewer.tsx`
 
+**Design Principle: Mobile-First Simplicity**
+- **Goal:** Avoid interaction issues like hamburger menu problems
+- **Philosophy:** "If you can swipe through it like Instagram stories, it's simple enough"
+- **Gestures > Buttons** - Prioritize natural touch interactions
+- **Large Touch Targets** - No tiny buttons that fail to register
+- **Minimal UI** - Content is king, controls are secondary
+- **No Complex Overlays** - Avoid layering that blocks interactions
+
 **Features:**
 - Replaces iframe approach with native React component
 - Same UX as recursive-landing viewer:
-  - Swipe navigation (left/right)
-  - Keyboard arrows
-  - Mouse wheel scrolling
-  - Fullscreen mode
-  - Page counter
+  - **Swipe navigation** (left/right) - PRIMARY interaction
+  - Keyboard arrows (desktop)
+  - Large fullscreen button (bottom corner, unmissable)
+  - Simple page counter (static display)
 - Renders images OR videos based on item type:
   ```tsx
   {items.map((item, idx) => (
@@ -229,6 +236,7 @@ Even admin tools should be beautiful. The forge itself deserves craft. 🔨
   ```
 - YouTube embeds use nocookie domain with `rel=0`, `modestbranding=1`
 - Mobile-responsive, touch-optimized
+- **No hamburger menus, no hover states, no complex controls**
 
 #### Phase 4: Dashboard Integration (1 hour)
 **Update:** `/dashboard/page.tsx`
