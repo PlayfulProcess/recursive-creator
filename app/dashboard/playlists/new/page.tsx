@@ -31,7 +31,6 @@ function NewPlaylistPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [lastSavedId, setLastSavedId] = useState<string | null>(null);
-  const [showPreview, setShowPreview] = useState(false);
 
   // Load playlist data when editing
   useEffect(() => {
@@ -187,7 +186,6 @@ function NewPlaylistPageContent() {
 
       setSuccess(true);
       setLastSavedId(insertData.id);
-      setShowPreview(true); // AUTO-SHOW PREVIEW
     } catch (err) {
       console.error('Error saving playlist:', err);
       setError(err instanceof Error ? err.message : 'Failed to save playlist');
@@ -398,15 +396,6 @@ function NewPlaylistPageContent() {
               {saving ? 'Saving...' : 'Save Playlist'}
             </button>
 
-            {lastSavedId && (
-              <button
-                onClick={() => setShowPreview(!showPreview)}
-                className="px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-colors"
-              >
-                {showPreview ? 'Hide Preview' : 'Preview Playlist'}
-              </button>
-            )}
-
             <button
               onClick={() => router.push('/dashboard')}
               disabled={saving}
@@ -417,7 +406,7 @@ function NewPlaylistPageContent() {
           </div>
 
           {/* Preview Section */}
-          {showPreview && lastSavedId && (
+          {lastSavedId && (
             <div className="mt-8 border-t border-gray-700 pt-8">
               <h3 className="text-lg font-semibold text-white mb-4">Playlist Preview</h3>
               <div className="bg-gray-900 rounded-lg overflow-hidden" style={{ height: '80vh' }}>

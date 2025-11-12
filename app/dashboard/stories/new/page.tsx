@@ -29,7 +29,6 @@ function NewStoryPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [lastSavedId, setLastSavedId] = useState<string | null>(null);
-  const [showPreview, setShowPreview] = useState(false);
 
   // Load story data when editing
   useEffect(() => {
@@ -104,7 +103,8 @@ function NewStoryPageContent() {
     for (const pattern of drivePatterns) {
       const match = url.match(pattern);
       if (match && match[1]) {
-        return `https://drive.google.com/uc?export=view&id=${match[1]}`;
+        // Use Google's direct image CDN (more reliable for CORS)
+        return `https://lh3.googleusercontent.com/d/${match[1]}`;
       }
     }
 
@@ -144,6 +144,12 @@ function NewStoryPageContent() {
       return;
     }
 
+    // Wrap image URLs in proxy for CORS bypass
+    const proxyWrappedPages = validPages.map(page => ({
+      ...page,
+      image_url: `https://creator.recursive.eco/api/proxy-image?url=${encodeURIComponent(page.image_url)}`
+    }));
+
     setSaving(true);
     setError(null);
     setSuccess(false);
@@ -168,7 +174,7 @@ function NewStoryPageContent() {
             is_active: 'false',
             reviewed: 'false',
             creator_id: user.id,
-            pages: validPages
+            pages: proxyWrappedPages
           }
         })
         .select()
@@ -178,7 +184,6 @@ function NewStoryPageContent() {
 
       setSuccess(true);
       setLastSavedId(insertData.id);
-      setShowPreview(true); // AUTO-SHOW PREVIEW
 
       // Don't auto-redirect, let user preview or manually return
       // setTimeout(() => {
@@ -349,7 +354,7 @@ function NewStoryPageContent() {
                   {page.image_url && (
                     <div className="mt-3">
                       <img
-                        src={page.image_url}
+                        src={`/api/proxy-image?url=${encodeURIComponent(page.image_url)}`}
                         alt={`Page ${page.page_number} preview`}
                         className="max-w-xs max-h-32 rounded border border-gray-600"
                         onError={(e) => {
@@ -373,15 +378,6 @@ function NewStoryPageContent() {
               {saving ? 'Saving...' : 'Save New Draft'}
             </button>
 
-            {lastSavedId && (
-              <button
-                onClick={() => setShowPreview(!showPreview)}
-                className="px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-colors"
-              >
-                {showPreview ? 'Hide Preview' : 'Preview Story'}
-              </button>
-            )}
-
             <button
               onClick={() => router.push('/dashboard')}
               disabled={saving}
@@ -392,7 +388,7 @@ function NewStoryPageContent() {
           </div>
 
           {/* Preview Section */}
-          {showPreview && lastSavedId && (
+          {lastSavedId && (
             <div className="mt-8 border-t border-gray-700 pt-8">
               <h3 className="text-lg font-semibold text-white mb-4">Story Preview</h3>
               <div className="bg-gray-900 rounded-lg overflow-hidden" style={{ height: '80vh' }}>
