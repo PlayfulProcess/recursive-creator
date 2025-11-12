@@ -105,7 +105,7 @@ Even admin tools should be beautiful. The forge itself deserves craft. 🔨
 
 ```json
 {
-  "document_type": "sequence",
+  "document_type": "creative_work",
   "tool_slug": "sequence",
   "story_slug": "bedtime-routine-1234567890",
   "document_data": {
@@ -149,10 +149,11 @@ Even admin tools should be beautiful. The forge itself deserves craft. 🔨
 
 ### Implementation Plan: Unified Sequence Creator
 
-#### Phase 1: Backend Setup (1-2 hours)
-- [ ] Add `sequence` to allowed document_types in RLS policies
-- [ ] No schema changes needed (JSONB flexibility!)
-- [ ] Test that `user_documents` accepts new format
+#### Phase 1: Backend Setup (NO DATABASE CHANGES!)
+- [x] Use existing `document_type: 'creative_work'` (already allowed)
+- [x] No migration needed - works with existing database!
+- [x] No schema changes needed (JSONB flexibility!)
+- [x] `tool_slug: 'sequence'` to identify sequences vs other creative works
 
 #### Phase 2: Unified Creator UI (4-5 hours)
 **Create:** `/dashboard/sequences/new`
