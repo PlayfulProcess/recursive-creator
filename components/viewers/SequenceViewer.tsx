@@ -143,17 +143,19 @@ export default function SequenceViewer({
             )}
           </div>
         ) : (
-          <div className="w-full h-full flex items-center justify-center p-4">
-            <iframe
-              src={`https://www.youtube-nocookie.com/embed/${currentItem.video_id}?rel=0&modestbranding=1`}
-              title={currentItem.title || `Video ${currentItem.position}`}
-              className="w-full max-w-4xl aspect-video rounded-lg"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
+          <div className="w-full h-full flex flex-col items-center justify-center p-4">
+            <div className="w-full max-w-4xl">
+              <iframe
+                src={`https://www.youtube-nocookie.com/embed/${currentItem.video_id}?rel=0&modestbranding=1`}
+                title={currentItem.title || `Video ${currentItem.position}`}
+                className="w-full aspect-video rounded-lg"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
             {currentItem.title && (
-              <div className="absolute bottom-24 left-0 right-0 text-center">
-                <p className="text-white text-lg px-6 py-3 bg-black/50 rounded-lg backdrop-blur-sm inline-block">
+              <div className="mt-4 max-w-2xl mx-auto text-center">
+                <p className="text-white text-lg px-6 py-3 bg-black/50 rounded-lg backdrop-blur-sm">
                   {currentItem.title}
                 </p>
               </div>

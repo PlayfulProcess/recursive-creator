@@ -174,7 +174,7 @@ function NewSequencePageContent() {
     });
 
     setItems([...items, ...newItems]);
-    setBulkUrls(''); // Clear textarea after adding
+    // Don't clear textarea - let user keep editing the list
     setError(null);
   };
 
@@ -238,44 +238,59 @@ function NewSequencePageContent() {
     setSuccess(false);
 
     try {
-      const baseSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-      const timestamp = Date.now();
-      const slug = `${baseSlug}-${timestamp}`;
+      if (editingId) {
+        // UPDATE MODE: Save over existing project
+        const { data: updateData, error: updateError } = await supabase
+          .from('user_documents')
+          .update({
+            document_data: {
+              title: title.trim(),
+              description: description.trim(),
+              is_active: 'false',  // Reset to pending on edit
+              reviewed: 'false',
+              creator_id: user.id,
+              items: validItems  // Save raw URLs, no proxy wrapping
+            }
+          })
+          .eq('id', editingId)
+          .eq('user_id', user.id)  // Security: only update own projects
+          .select()
+          .single();
 
-      // Wrap image URLs in proxy for CORS bypass
-      const proxyWrappedItems = validItems.map(item => {
-        if (item.type === 'image' && item.image_url) {
-          return {
-            ...item,
-            image_url: `/api/proxy-image?url=${encodeURIComponent(item.image_url)}`
-          };
-        }
-        return item;
-      });
+        if (updateError) throw updateError;
 
-      const { data: insertData, error: insertError } = await supabase
-        .from('user_documents')
-        .insert({
-          user_id: user.id,
-          document_type: 'creative_work',
-          tool_slug: 'sequence',
-          story_slug: slug,
-          document_data: {
-            title: title.trim(),
-            description: description.trim(),
-            is_active: 'false',
-            reviewed: 'false',
-            creator_id: user.id,
-            items: proxyWrappedItems
-          }
-        })
-        .select()
-        .single();
+        setSuccess(true);
+        setLastSavedId(updateData.id);
+      } else {
+        // CREATE MODE: Insert new project
+        const baseSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+        const timestamp = Date.now();
+        const slug = `${baseSlug}-${timestamp}`;
 
-      if (insertError) throw insertError;
+        const { data: insertData, error: insertError } = await supabase
+          .from('user_documents')
+          .insert({
+            user_id: user.id,
+            document_type: 'creative_work',
+            tool_slug: 'sequence',
+            story_slug: slug,
+            document_data: {
+              title: title.trim(),
+              description: description.trim(),
+              is_active: 'false',
+              reviewed: 'false',
+              creator_id: user.id,
+              items: validItems  // Save raw URLs, no proxy wrapping
+            }
+          })
+          .select()
+          .single();
 
-      setSuccess(true);
-      setLastSavedId(insertData.id);
+        if (insertError) throw insertError;
+
+        setSuccess(true);
+        setLastSavedId(insertData.id);
+      }
     } catch (err) {
       console.error('Error saving project:', err);
       setError(err instanceof Error ? err.message : 'Failed to save project');
@@ -311,7 +326,7 @@ function NewSequencePageContent() {
             {success && (
               <div className="mb-6 bg-green-900/50 border border-green-700 rounded-lg p-4">
                 <p className="text-green-200">
-                  Project saved successfully!
+                  {editingId ? 'Project updated successfully!' : 'Project created successfully!'}
                 </p>
               </div>
             )}
@@ -377,7 +392,7 @@ function NewSequencePageContent() {
                   disabled={!bulkUrls.trim() || items.length >= MAX_ITEMS}
                   className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  Parse & Add URLs →
+                  Update Sidebar →
                 </button>
               </div>
             </div>
@@ -430,7 +445,7 @@ function NewSequencePageContent() {
                         <img
                           src={`/api/proxy-image?url=${encodeURIComponent(item.image_url)}`}
                           alt={item.alt_text || `Item ${item.position}`}
-                          className="w-full h-20 object-cover rounded border border-gray-600 mb-2"
+                          className="w-full h-20 object-contain rounded border border-gray-600 mb-2 bg-gray-700"
                           onError={(e) => {
                             e.currentTarget.style.display = 'none';
                           }}
@@ -440,7 +455,7 @@ function NewSequencePageContent() {
                         <img
                           src={`https://img.youtube.com/vi/${item.video_id}/mqdefault.jpg`}
                           alt={item.title || `Video ${item.position}`}
-                          className="w-full h-20 object-cover rounded border border-gray-600 mb-2"
+                          className="w-full h-20 object-contain rounded border border-gray-600 mb-2 bg-gray-700"
                           onError={(e) => {
                             e.currentTarget.style.display = 'none';
                           }}
@@ -481,7 +496,7 @@ function NewSequencePageContent() {
                 disabled={saving || !title.trim() || items.length === 0}
                 className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {saving ? 'Saving...' : 'Save Project'}
+                {saving ? 'Saving...' : (editingId ? 'Save Changes' : 'Save New Project')}
               </button>
 
               <button
