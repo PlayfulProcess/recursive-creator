@@ -422,7 +422,12 @@ function NewSequencePageContent() {
 
         if (insertError) throw insertError;
 
+        if (!insertData || !insertData.id) {
+          throw new Error('Failed to create project: No ID returned');
+        }
+
         setSuccess(true);
+        console.log('✅ Project created successfully:', insertData.id);
         // Transition to edit mode
         router.push(`/dashboard/sequences/new?id=${insertData.id}`);
       }

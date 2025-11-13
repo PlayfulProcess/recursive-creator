@@ -81,6 +81,9 @@ export async function POST(request: NextRequest) {
       file.mimeType.startsWith('video/')
     );
 
+    // Sort alphabetically by filename
+    mediaFiles.sort((a: any, b: any) => a.name.localeCompare(b.name));
+
     if (mediaFiles.length === 0) {
       return NextResponse.json(
         { error: 'No images or videos found in this folder.' },
