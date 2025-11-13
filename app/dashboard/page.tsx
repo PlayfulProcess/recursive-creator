@@ -146,6 +146,44 @@ export default function DashboardPage() {
                       <h3 className="text-lg font-semibold text-gray-900">
                         {sequence.document_data.title}
                       </h3>
+
+                      {/* Show public URL if published */}
+                      {sequence.document_data.is_active === 'true' && (
+                        <div className="mt-2 flex items-center gap-2 bg-blue-50 p-2 rounded-lg">
+                          <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded font-medium whitespace-nowrap">
+                            🌐 Published
+                          </span>
+                          <div className="flex-1 flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={`https://recursive.eco/view/${sequence.id}`}
+                              readOnly
+                              className="flex-1 text-xs px-2 py-1 bg-white border border-gray-300 rounded font-mono"
+                              onClick={(e) => (e.target as HTMLInputElement).select()}
+                            />
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(`https://recursive.eco/view/${sequence.id}`);
+                                alert('Link copied!');
+                              }}
+                              className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 whitespace-nowrap"
+                              title="Copy link"
+                            >
+                              📋 Copy
+                            </button>
+                            <a
+                              href={`https://recursive.eco/view/${sequence.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2 py-1 text-xs bg-gray-600 text-white rounded hover:bg-gray-700 whitespace-nowrap"
+                              title="Open in new tab"
+                            >
+                              🔗 Open
+                            </a>
+                          </div>
+                        </div>
+                      )}
+
                       {sequence.document_data.description && (
                         <p className="text-sm text-gray-600 mt-1">
                           {sequence.document_data.description}

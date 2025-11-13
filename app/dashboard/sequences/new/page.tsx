@@ -39,6 +39,8 @@ function NewSequencePageContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [isPublished, setIsPublished] = useState(false);
+  const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
 
   // Drive folder import modal
   const [showImportModal, setShowImportModal] = useState(false);
@@ -67,6 +69,7 @@ function NewSequencePageContent() {
 
       setTitle(data.document_data.title || '');
       setDescription(data.document_data.description || '');
+      setIsPublished(data.document_data.is_active === 'true');
 
       if (data.document_data.items && data.document_data.items.length > 0) {
         // Unwrap double-proxied URLs from old data
@@ -375,13 +378,15 @@ function NewSequencePageContent() {
     try {
       if (editingId) {
         // UPDATE MODE: Save over existing project
+        const wasPublished = publishedUrl !== null; // Track if was already published
+
         const { data: updateData, error: updateError } = await supabase
           .from('user_documents')
           .update({
             document_data: {
               title: title.trim(),
               description: description.trim(),
-              is_active: 'false',  // Reset to pending on edit
+              is_active: isPublished ? 'true' : 'false',
               reviewed: 'false',
               creator_id: user.id,
               items: validItems  // Save raw URLs, no proxy wrapping
@@ -393,6 +398,32 @@ function NewSequencePageContent() {
           .single();
 
         if (updateError) throw updateError;
+
+        // Send email if newly published (wasn't published before, now is)
+        if (isPublished && !wasPublished) {
+          try {
+            await fetch('/api/notify-publish', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                projectId: editingId,
+                title: title.trim(),
+                description: description.trim(),
+                itemCount: validItems.length,
+                userId: user.id
+              })
+            });
+          } catch (err) {
+            // Silent fail - don't block user workflow
+            console.error('Failed to send publish notification:', err);
+          }
+        }
+
+        if (isPublished) {
+          setPublishedUrl(`https://recursive.eco/view/${editingId}`);
+        } else {
+          setPublishedUrl(null);
+        }
 
         setSuccess(true);
       } else {
@@ -411,7 +442,7 @@ function NewSequencePageContent() {
             document_data: {
               title: title.trim(),
               description: description.trim(),
-              is_active: 'false',
+              is_active: isPublished ? 'true' : 'false',
               reviewed: 'false',
               creator_id: user.id,
               items: validItems  // Save raw URLs, no proxy wrapping
@@ -424,6 +455,28 @@ function NewSequencePageContent() {
 
         if (!insertData || !insertData.id) {
           throw new Error('Failed to create project: No ID returned');
+        }
+
+        // Send email if published
+        if (isPublished) {
+          try {
+            await fetch('/api/notify-publish', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                projectId: insertData.id,
+                title: title.trim(),
+                description: description.trim(),
+                itemCount: validItems.length,
+                userId: user.id
+              })
+            });
+          } catch (err) {
+            // Silent fail - don't block user workflow
+            console.error('Failed to send publish notification:', err);
+          }
+
+          setPublishedUrl(`https://recursive.eco/view/${insertData.id}`);
         }
 
         setSuccess(true);
@@ -525,7 +578,47 @@ function NewSequencePageContent() {
         <div className="space-y-8">
           {/* Metadata */}
           <div className="bg-gray-800 rounded-lg shadow-lg p-6">
-            {success && (
+            {success && publishedUrl && (
+              <div className="mb-6 bg-green-900/20 border border-green-500 rounded-lg p-4">
+                <h3 className="text-green-400 font-semibold mb-2">
+                  ✅ Project Published!
+                </h3>
+                <p className="text-sm text-gray-300 mb-3">
+                  Your project is now live. Share this link:
+                </p>
+                <div className="flex items-center gap-2 mb-3">
+                  <input
+                    type="text"
+                    value={publishedUrl}
+                    readOnly
+                    className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white font-mono text-sm"
+                    onClick={(e) => (e.target as HTMLInputElement).select()}
+                  />
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(publishedUrl);
+                      alert('Link copied to clipboard!');
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    📋 Copy
+                  </button>
+                  <a
+                    href={publishedUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+                  >
+                    🔗 View
+                  </a>
+                </div>
+                <p className="text-xs text-gray-500">
+                  ⚠️ This link is public. Anyone with it can view your project.
+                </p>
+              </div>
+            )}
+
+            {success && !publishedUrl && (
               <div className="mb-6 bg-green-900/50 border border-green-700 rounded-lg p-4">
                 <p className="text-green-200">
                   {editingId ? 'Project updated successfully!' : 'Project created successfully!'}
@@ -701,6 +794,27 @@ function NewSequencePageContent() {
 
           {/* Actions */}
           <div className="bg-gray-800 rounded-lg shadow-lg p-6">
+            {/* Publish Toggle */}
+            <div className="mb-6 p-4 bg-gray-700/50 rounded-lg border border-gray-600">
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isPublished}
+                  onChange={(e) => setIsPublished(e.target.checked)}
+                  className="w-5 h-5 rounded border-gray-500 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800"
+                />
+                <div className="ml-3 flex-1">
+                  <div className="text-sm font-medium text-white">
+                    Publish this project
+                  </div>
+                  <div className="text-xs text-gray-400">
+                    Make it publicly accessible at https://recursive.eco/view/...
+                    {isPublished && ' (You will receive an email confirmation)'}
+                  </div>
+                </div>
+              </label>
+            </div>
+
             <div className="flex gap-4">
               <button
                 onClick={handleSaveDraft}
