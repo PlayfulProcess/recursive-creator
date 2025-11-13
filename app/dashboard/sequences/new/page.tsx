@@ -103,7 +103,7 @@ function NewSequencePageContent() {
             // Image
             return item.image_url || '';
           }
-        }).filter(url => url.trim() !== '');
+        }).filter((url: string) => url.trim() !== '');
 
         setBulkUrls(urlList.join('\n'));
       }
