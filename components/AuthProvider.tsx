@@ -22,7 +22,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [status, setStatus] = useState<AuthStatus>('loading')
   const supabase = createClient()
-
+  
   // StrictMode duplicate event protection
   const handledInitial = useRef(false)
 

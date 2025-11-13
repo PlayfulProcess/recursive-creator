@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import Script from 'next/script';
+import { useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useAuth } from '@/components/AuthProvider';
 
@@ -16,65 +16,20 @@ export function Header() {
     }
   };
 
-  useEffect(() => {
-    // Initialize spiral after component mounts and script loads
-    const initSpiral = () => {
-      if (typeof window !== 'undefined' && (window as any).createSpiral) {
-        const container = document.getElementById('header-logo-container');
-        if (container) {
-          (window as any).createSpiral(container, {
-            size: 90,
-            turns: 6,
-            color: '#9333ea',
-            strokeWidth: 0.8,
-            opacity: 0.8,
-            animated: true
-          });
-        }
-      }
-    };
-
-    // Try immediately, then retry after short delay
-    initSpiral();
-    const timer = setTimeout(initSpiral, 100);
-    return () => clearTimeout(timer);
-  }, []);
-
   return (
-    <>
-      {/* Load spiral.js */}
-      <Script
-        src="/spiral/spiral.js"
-        strategy="afterInteractive"
-        onLoad={() => {
-          // Reinitialize when script loads
-          if (typeof window !== 'undefined' && (window as any).createSpiral) {
-            const container = document.getElementById('header-logo-container');
-            if (container) {
-              (window as any).createSpiral(container, {
-                size: 90,
-                turns: 6,
-                color: '#9333ea',
-                strokeWidth: 0.8,
-                opacity: 0.8,
-                animated: true
-              });
-            }
-          }
-        }}
-      />
-
-      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-sm border-b border-gray-200">
+    <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-8">
-              <div className="flex items-center space-x-2">
-                <Link href="/" className="flex items-center space-x-2">
-                  <div id="header-logo-container" className="h-20 w-20 overflow-hidden">
-                    {/* Animated spiral logo will be inserted here by JavaScript */}
-                  </div>
-                </Link>
-              </div>
+              <Link href="/" className="flex items-center space-x-2">
+                <Image
+                  src="/recursive-logo.svg"
+                  alt="Recursive.eco"
+                  width={60}
+                  height={60}
+                  className="h-12 w-auto"
+                />
+              </Link>
 
               <nav className="hidden md:flex space-x-6 items-center">
                 {/* Channels Dropdown */}
@@ -231,6 +186,5 @@ export function Header() {
           )}
         </div>
       </header>
-    </>
   );
 }

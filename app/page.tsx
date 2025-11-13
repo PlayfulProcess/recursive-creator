@@ -1,9 +1,9 @@
 'use client';
 
 import { useAuth } from '@/components/AuthProvider';
+import { PageModals } from '@/components/PageModals';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { PageModals } from '@/components/PageModals';
 
 export default function Home() {
   const { user, status } = useAuth();

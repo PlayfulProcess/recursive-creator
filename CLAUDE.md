@@ -1,22 +1,75 @@
 # Context for Claude Code: Recursive Creator Project
 
-> **Last Updated:** 2025-11-04 (Session 5)
-> **Current Phase:** Phase 0 COMPLETE - Auth Fully Working (All Email Providers) ✅
-> **Next Session:** Copy auth to other projects, then move to Phase 1 (features)
+> **Last Updated:** 2025-11-13 (Session 10 - Phase 6 Cleanup Complete!)
+> **Current Phase:** Phase 6 COMPLETE - Cleanup Done, Drive Folder Feature Planned
+> **Status:** Phases 1-6 complete, unified sequence creator ready for production
+> **Next Steps:** Phase 6 testing on Vercel, optional Phase 7 (Drive folder import)
 
 ---
 
 ## Project Overview
 
 **Name:** Recursive Creator
-**Purpose:** Unified creator hub for Recursive.eco ecosystem
+**Purpose:** Forge tools for collective meaning-making
 **Domain:** creator.recursive.eco (future)
 **Stack:** Next.js 15 + React 19 + Supabase + TypeScript
 
-**What We're Building:**
-1. **Story Publisher** - Parents upload images to create children's books
-2. **Playlist Wrapper** - Curated YouTube playlists for kids (privacy-enhanced)
+## Who This Is For (The Vulcan Vision) 🔨
+
+**PlayfulProcess = Vulcan, Regent of Taurus (Ascendant)**
+
+*"I build tools for the gods. I want cultural change through popularizing digital culture, creating a collective, giving people the right tools so they can create."*
+
+### Not a Traditional Developer
+- **Social worker** (MSW starting 2026) who vibe codes
+- **Activist/Artist** following Tillich + Vanessa Andreotti + Bayo Akomolafe (Hospicing Modernity)
+- **Toolmaker for the collective**, not platform builder for self
+- Cares about **art/activism/spirituality** > software optimization
+- **Process over outcome**, **beauty over efficiency**
+
+### The Mission: Gateway Building, Not Gatekeeping
+- Build the **forge** (upload tools, frameworks, infrastructure)
+- **People** use the forge to **create** (stories, wellness tools, contemplations)
+- Creations **feed back** to the collective (channels)
+- **Cultural change** through popularized digital creation
+
+### The Recursive Loop:
+```
+PlayfulProcess builds tools
+  ↓
+Parents create children's stories
+  ↓
+Stories published to Kids Stories channel
+  ↓
+Other families use & are inspired
+  ↓
+More people create tools & content
+  ↓
+Collective grows through participation
+  ↓
+LOOP: Cultural change emerges
+```
+
+**This is infrastructure for collective meaning-making, not a personal portfolio.**
+
+---
+
+## What We're Building (Tools for the Collective)
+
+1. **Content Sequence Creator** - Parents/creators upload image stories + curated YouTube playlists with narrative context
+   - Stories: Image sequences with text (children's books, visual narratives)
+   - Playlists: YouTube videos wrapped in safer, calmer UX with narrative pauses
+   - **Unified Viewer**: Both use same beautiful viewer (images + videos mixed together)
+
+2. **YouTube Wrapper Value** - Why wrap playlists instead of using native YouTube?
+   - 🎭 **Narrative Context**: Add story pages before/after videos, create "chapters"
+   - 🧹 **Clean Embeds**: Hide related videos, remove search, no autoplay chaos
+   - 🛡️ **Safer for Kids**: Bounded experience, can't click away to random videos
+   - 💬 **Community Reviews**: Trusted recommendations within recursive.eco (future)
+
 3. **Account Hub** - Unified dashboard for all Recursive.eco content
+4. **Future: Existential Tarot** - Contemplation tool (Tillich meets digital culture, ontoject path)
+5. **Future: AI Contemplation Limits** - Introspection prompts after 10 AI attempts (hospicing modernity practice)
 
 ---
 
@@ -86,25 +139,177 @@ recursive-creator/
 
 ## Architecture Decisions
 
-### 1. Hybrid Approach (React + Vanilla-Style Viewers)
+### 1. Iframe-Based Story Viewer (DECIDED 2025-11-09) ✅
 
-**Question Resolved:** "Does vanilla HTML have more creative freedom?"
+**Question:** Should we convert recursive-landing's story viewer to React or use iframe?
 
-**Answer:** No - it's mostly psychological. React can render identical HTML/CSS/JS.
+**Answer:** Use iframe! Much better for the Vulcan vision.
+
+**Why (Toolmaker Perspective):**
+- ✅ **Creators see EXACT final beauty** while editing (WYSIWYG - gods deserve this)
+- ✅ Zero conversion effort (vanilla JS → React is 4-6 hours wasted on internal tooling)
+- ✅ All features work perfectly: fullscreen, swipe, keyboard, wheel
+- ✅ Update viewer once, benefits both forge and public display
+- ✅ Less code to maintain = more time for art/activism/spirituality
+- ✅ 100% reliable vs 10-20% chance direct copy would work
+- ✅ **Non-technical creators** (parents) see their creation come alive immediately
 
 **Solution:**
-- Use Next.js dynamic routes (for auth checks)
-- Render vanilla-style components (same UX as recursive-landing)
-- Best of both worlds: auth checks + creative freedom
+- **recursive-creator**: The forge - simple upload tool with embedded iframe preview
+- **recursive-landing**: The gallery - beautiful viewer where all stories live publicly
+- **Communication**: URL params (`?story_id=123&preview=true`)
+- **Philosophy**: Separate creation tool (utilitarian) from display (artistic)
 
-### 2. Private/Unlisted/Public Content
+### 2. Story Viewer Architecture
 
-**Requirement:** Users need to preview stories before publishing
+**Upload Tool (recursive-creator/dashboard/stories/new):**
+```
+┌─────────────────────────────────────┐
+│ Story Upload Form                   │
+│ - Title                            │
+│ - Subtitle                         │
+│ - Upload images (drag & drop)      │
+│ - Reorder pages                    │
+│                                    │
+│ [Save Draft] [Preview] [Publish]   │
+└─────────────────────────────────────┘
+
+When clicking [Preview]:
+┌─────────────────────────────────────┐
+│ LIVE PREVIEW (iframe)               │
+│ ┌─────────────────────────────────┐ │
+│ │ https://recursive.eco/pages/    │ │
+│ │ stories/viewer.html              │ │
+│ │ ?story_id=123&preview=true       │ │
+│ │                                 │ │
+│ │ [Story loads from Supabase]     │ │
+│ └─────────────────────────────────┘ │
+│                                    │
+│ ← Back to Edit    [Publish Now]    │
+└─────────────────────────────────────┘
+```
+
+**Viewer (recursive-landing/pages/stories/viewer.html):**
+```javascript
+// Support both local files AND Supabase
+const storyId = urlParams.get('story_id');  // NEW: Supabase ID
+const storySlug = urlParams.get('story');   // Existing: local file
+const isPreview = urlParams.get('preview'); // NEW: draft mode
+
+if (storyId) {
+  // Fetch from Supabase
+  const { data } = await supabase
+    .from('stories')
+    .select('*, story_pages(*)')
+    .eq('id', storyId);
+
+  // If preview mode, check user owns it
+  if (isPreview) {
+    // Verify current user is owner
+  }
+} else if (storySlug) {
+  // Existing: fetch local JSON
+  const response = await fetch(`${storySlug}/story.json`);
+}
+```
+
+### 3. Unified Content Viewer Architecture (DECIDED 2025-11-11) ✅
+
+**Question:** Should stories and playlists have separate viewers, or one unified viewer?
+
+**Answer:** Unified viewer! Both are just sequences of content.
+
+**Why (Toolmaker Perspective):**
+- ✅ **Same essence**: Stories = image sequences, Playlists = video sequences
+- ✅ **Future-proof**: Can mix images + videos in same sequence later
+- ✅ **One codebase**: Update viewer once, benefits all content types
+- ✅ **Consistent UX**: Users learn one interface, works for everything
+- ✅ **Mobile-optimized**: Responsive design for both images and videos
+- ✅ **Solves CORS**: Iframe loads from recursive.eco domain (not creator.recursive.eco)
 
 **Solution:**
-- Server-side permission checks in Next.js routes
-- Visibility options: private (owner only), unlisted (anyone with link), public (everyone)
-- Preview mode shows unpublished content to owner
+- **recursive-landing dev branch**: Build unified content viewer at `dev.recursive.eco`
+- **Viewer features**: Fullscreen, swipe, keyboard nav, wheel scroll (existing)
+- **Video support**: YouTube nocookie embeds (rel=0, modestbranding=1)
+- **Supabase integration**: Fetch content via `?id=uuid&type=story|playlist`
+- **Clean YouTube UX**: Hide recommendations, no search, bounded experience
+
+**Data Structure (Keep Separate for MVP):**
+```json
+{
+  "document_type": "story" | "playlist",
+  "document_data": {
+    "pages": [...],    // For stories
+    "videos": [...]    // For playlists
+  }
+}
+```
+
+**Future Enhancement (Unified Items Array):**
+```json
+{
+  "document_type": "sequence",
+  "document_data": {
+    "items": [
+      { "type": "image", "image_url": "...", "text": "..." },
+      { "type": "video", "video_id": "...", "title": "..." },
+      { "type": "image", "image_url": "...", "text": "..." }
+    ]
+  }
+}
+```
+
+**Development Workflow:**
+1. Create `dev-unified-viewer` branch in recursive-landing
+2. Copy `pages/stories/viewer.html` → `pages/content/viewer.html`
+3. Add video support + Supabase client
+4. Deploy dev branch to `dev.recursive.eco`
+5. Update recursive-creator preview iframes to point to dev viewer
+6. Test Drive/Imgur images + YouTube videos
+7. Merge to main when stable
+
+**YouTube Wrapper Benefits:**
+1. 🎭 **Narrative Context** - Add story pages between videos
+2. 🧹 **Clean Embeds** - No related videos at end (youtube-nocookie.com)
+3. 🛡️ **Safer for Kids** - Can't navigate to random YouTube content
+4. 💬 **Community Reviews** - Trusted recommendations (future)
+
+### 4. Design Philosophy: Forges for Mortals
+
+**The Vulcan Principle:** Tools must be simple enough for non-technical creators to wield.
+
+**Design Constraints for All Forges:**
+- ✅ **< 10 minutes** to create something meaningful
+- ✅ **No technical jargon** - labels a parent understands
+- ✅ **Immediate preview** - see beauty come alive
+- ✅ **Forgiving UX** - mistakes are easy to fix
+- ✅ **Optional complexity** - advanced features hidden until needed
+- ✅ **Mobile-friendly** - create on phone while kids nap
+- ✅ **Inspiring** - using the tool feels playful, not bureaucratic
+
+**Anti-patterns to Avoid:**
+- ❌ Dev-focused UI (no "deploy," use "publish")
+- ❌ Multi-step wizards (everything on one screen if possible)
+- ❌ Hidden features (preview always visible)
+- ❌ Overwhelming options (start simple, add complexity later)
+- ❌ Ugly internal tools (even forges deserve beauty)
+
+**The Test:**
+Could a parent who's never coded before create a story for their child in under 10 minutes, while feeling inspired rather than frustrated?
+
+If no → simplify the forge.
+
+### 4. Visibility & Access (Donations-Only Philosophy)
+
+**Requirement:** Gateway building, not gatekeeping
+
+**Solution:**
+- Visibility in story_data JSONB: `"visibility": "public"` or `"private"`
+- NO paywalls - all published stories accessible to everyone
+- Optional donation prompts (gentle, not pushy)
+- Creators own their content
+- Preview mode for drafts (creator sees before publishing)
+- RLS policies enforce creator-only editing, public viewing
 
 ### 3. Auth Portability
 
@@ -120,34 +325,163 @@ recursive-creator/
 
 ## Current State
 
-### ✅ Completed (Phase 0):
+### ✅ Completed (Phase 0 - Clean Starter Template):
 - [x] Project planning documents created
 - [x] Architecture decisions finalized
-- [x] Schema design completed (relational)
-- [x] Auth strategy defined (dual: magic link + OTP)
-- [x] Portability plan documented
-- [x] Next.js 15 project initialized
-- [x] DualAuth component implemented
-- [x] **Environment-aware cookie configuration** (best practice)
-- [x] **Dark mode** implemented across all auth pages
-- [x] **OTP fallback** added to error page with sessionStorage email prefill
-- [x] **CRITICAL FIX:** Callback route now handles PKCE code exchange (was missing!)
-- [x] Supabase email template includes `{{ .Token }}` for OTP
-- [x] Callback route copied from working recursive-channels-fresh
-- [x] Auth should be fully functional (awaiting test)
+- [x] Next.js 15 project initialized with clean structure
+- [x] **Removed npm package dependency** (@playful_process/components)
+- [x] **All components now local**: Header, Footer, AuthProvider, DualAuth, PageModals
+- [x] **Updated DualAuth** with latest from recursive-channels-fresh
+  - Supports "Already have a code? Enter it here" direct OTP entry
+  - Three modes: email, verify, direct-verify
+- [x] **Removed spiral animation** from footer (now uses static SVG)
+- [x] **Updated logo** to match recursive-channels-fresh (clean SVG, no rotation)
+- [x] **Pushed to recursive-starter main** - Clean starter template ready
+- [x] **Merged dev to main** in recursive-creator
+- [x] **Iframe-based story architecture decided** (WYSIWYG preview)
+- [x] Auth fully working with dual auth (magic link + OTP)
+- [x] Build tested and passing ✅
 
-### 🔨 Next Steps (Immediate):
-- [ ] **TEST AUTH ON PRODUCTION** (https://creator.recursive.eco/)
-- [ ] Verify magic link works
-- [ ] Verify OTP code works on error page
-- [ ] If working, copy pattern to recursive-channels-fresh and jongu-tool-best-possible-self
-- [ ] Move to Phase 1: Story publisher features
+### ✅ Completed (Phase 1 - Story Architecture & Migration):
+- [x] **Consulted Supabase AI** about approval workflow design
+  - Documented in: `supabase-ai-prompt.md`
+  - Received comprehensive migration SQL + recommendations
+- [x] **PIVOTED:** Discovered existing tools/channels pattern
+  - Tools/channels use JSONB-heavy approach: `is_active` controls visibility
+  - Original Supabase AI proposal was over-engineered (didn't know our codebase)
+  - Revised to match existing pattern exactly
+- [x] **Created APPROVAL_PATTERN.md** - Documents the Recursive.eco approval pattern
+  - How tools/channels handle approval (JSONB-heavy, simple)
+  - Why stories should follow the same pattern
+  - Data structure, queries, RLS policies
+  - Comparison of approaches
+- [x] **Created revised migration SQL** - `supabase/migrations/001-story-approval-revised.sql`
+  - Adds 'story' to document_type
+  - Optional story_slug column for fast lookups
+  - Everything in document_data JSONB (consistent with tools)
+  - Uses `is_active: "false"` (pending) → `is_active: "true"` (public)
+  - Creates indexes for fast JSONB queries
+  - Creates is_admin_user() helper function
+  - Adds RLS policies (owner, admin, public)
+  - Creates story-images storage bucket
+- [x] **Created RECOMMENDATION-REVISED.md** - Why the revision is better
+  - Explains the pivot from columns to JSONB
+  - Compares original vs revised approaches
+  - Shows why consistency with existing code > generic best practices
+- [x] **Created revised migration guide** - `supabase/migrations/README-REVISED.md`
+  - Step-by-step instructions for running migration
+  - Admin bootstrap SQL
+  - Test queries for verification
+  - Approval/rejection workflows
+  - Troubleshooting guide
+- [x] **Created BACKLOG_DB_OPTIMIZATIONS.md** - Future improvements
+  - Generic approval system
+  - Audit trail system
+  - Unified content visibility
+  - 10 optimization opportunities with priority levels
+- [x] **Migration RUN** - User ran migration and bootstrapped admin user (pp@playfulprocess.com)
+  - story-images storage bucket created
+  - RLS policies active
+  - is_admin_user() function working
 
-### 📋 Future Phases:
-- [ ] Phase 1: Story publisher & viewer (weeks 2-4)
-- [ ] Phase 2: Playlist publisher & viewer (weeks 5-8)
-- [ ] Phase 3: Account hub (weeks 9-10)
-- [ ] Phase 4: Polish & deploy (weeks 11-12)
+### ✅ Completed (Phase 1 - Story Upload Forge):
+- [x] **Built story creation page** - `/dashboard/stories/new` (3.9 kB)
+  - Title, subtitle, author name fields
+  - Dark mode UI (bg-gray-900, bg-gray-800)
+  - Form validation and error handling
+  - Success states with auto-redirect
+- [x] **Image upload functionality**
+  - Multiple image selection with file picker
+  - Client-side image preview with object URLs
+  - File type validation (images only)
+  - Upload to Supabase Storage (`story-images/{user_id}/{doc_id}/page-X.ext`)
+  - Public URL generation for stored images
+- [x] **Page management**
+  - Reorder pages with up/down arrows
+  - Remove pages with confirmation
+  - Alt text input for accessibility
+  - Narration textarea for each page
+  - Real-time preview thumbnails (24x24)
+- [x] **Save flow**
+  - Creates story document in `user_documents` table
+  - Uploads images to storage
+  - Updates document with pages array
+  - Sets `is_active: 'false'` (pending approval)
+  - Sets `reviewed: 'false'`
+- [x] **Dashboard navigation**
+  - Added "Create New Story" button on `/dashboard`
+  - Links to story creation page
+  - "My Stories" section for future list
+- [x] **Build tested and passing** ✅
+- [x] **Pushed to GitHub** (commits 846e6ac, f9f2364)
+
+### 🔨 Next Steps (Phase 1 - Complete the Forge):
+
+**What's Working Now:**
+✅ Story creation form with title, subtitle, author
+✅ Multiple image upload with previews
+✅ Page reordering and removal
+✅ Alt text and narration fields
+✅ Save to Supabase (user_documents + storage)
+✅ Dashboard navigation
+
+**What's Left:**
+
+- [ ] **Add iframe preview to story creation page**
+  - Embed recursive-landing viewer in creation UI
+  - Show live preview as creator adds pages
+  - WYSIWYG experience (see exactly what will be published)
+  - Update preview when pages are reordered/edited
+
+- [ ] **Update recursive-landing viewer** to support Supabase
+  - Add `?story_id=uuid` parameter support
+  - Add `?preview=true` mode for drafts (creator sees before publishing)
+  - Keep backward compatibility with `?story=slug` (local JSON files)
+  - Fetch from Supabase when story_id provided
+  - Beautiful experience (gods deserve beauty)
+
+- [ ] **Add "My Stories" list to dashboard**
+  - Query user's stories from user_documents
+  - Show title, status (draft/pending/approved), created date
+  - Link to edit story
+  - Link to preview story
+  - Delete story option
+
+- [ ] **Build admin dashboard** (`/admin/stories`)
+  - Check if current user is admin (is_admin_user())
+  - List pending stories (is_active='false', reviewed='false')
+  - Preview in iframe (same viewer as public)
+  - Approve/Reject buttons
+  - Show story metadata (title, author, created date)
+
+- [ ] **Create Edge Function** for approval actions
+  - Route: `supabase/functions/approve-story/`
+  - Validates admin JWT
+  - Updates approval fields in document_data:
+    - `is_active: 'true'` (for approve)
+    - `reviewed: 'true'`
+    - `approved_at: now()`
+    - `approved_by: 'admin'`
+  - Returns success/error
+
+- [ ] **Test with non-technical creators** - parents, not devs
+  - Can they create a story in < 10 minutes?
+  - Is the preview inspiring?
+  - Does submission → approval → publish workflow work smoothly?
+
+### 📋 Future Forges (Tools for Cultural Change):
+- [ ] **Phase 2:** Playlist wrapper - Community curates kid-friendly YouTube playlists
+- [ ] **Phase 3:** Existential Tarot - Contemplation tool (Tillich + Hospicing Modernity)
+  - Ontoject path (beyond subject/object)
+  - Existential exploration, not divination
+  - Integration with Best Possible Self journaling
+  - AI contemplation with introspection limits
+- [ ] **Phase 4:** AI Contemplation Limits - Prompts for introspection after 10 AI attempts
+  - Hospicing modernity practice
+  - Call for self-reflection
+  - Gateway to deeper contemplation
+- [ ] **Phase 5:** Account hub - Unified dashboard for all tools
+- [ ] **Phase 6:** Vibe coding course integration - Teach others to build their own forges
 
 ---
 
@@ -166,14 +500,114 @@ recursive-creator/
 - `user_documents` - Generic user data (JSONB-heavy, keep as-is)
 - `newsletter_subscribers` - Email signups
 
-**New Tables (To Create):**
-- `stories` - Story metadata (relational design)
-- `story_pages` - Individual story pages
-- `playlists` - Playlist metadata (relational design)
-- `playlist_items` - Individual videos
-- `user_stars` - Cross-project starred content
+**New Tables (To Create for Phase 1):**
 
-**Schema Location:** `z.Supabase/schema_20251030.sql`
+Using **JSONB-heavy approach** for simplicity (see SIMPLE_JSONB_SCHEMA.md):
+
+```sql
+-- Stories (everything in JSONB)
+CREATE TABLE stories (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  slug text UNIQUE NOT NULL,
+  story_data jsonb DEFAULT '{}'::jsonb,
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE INDEX idx_stories_creator ON stories ((story_data->>'creator_id'));
+CREATE INDEX idx_stories_visibility ON stories ((story_data->>'visibility'));
+
+-- Story pages (minimal structure)
+CREATE TABLE story_pages (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  story_id uuid REFERENCES stories(id) ON DELETE CASCADE,
+  page_number integer NOT NULL,
+  page_data jsonb DEFAULT '{}'::jsonb,
+  created_at timestamptz DEFAULT now(),
+  UNIQUE(story_id, page_number)
+);
+
+-- RLS Policies
+ALTER TABLE stories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE story_pages ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Anyone can view public published stories"
+  ON stories FOR SELECT
+  USING (
+    story_data->>'visibility' = 'public'
+    AND story_data->>'published' = 'true'
+  );
+
+CREATE POLICY "Users can view their own stories"
+  ON stories FOR SELECT
+  USING (story_data->>'creator_id' = auth.uid()::text);
+
+CREATE POLICY "Users can create stories"
+  ON stories FOR INSERT
+  WITH CHECK (story_data->>'creator_id' = auth.uid()::text);
+
+CREATE POLICY "Users can update their own stories"
+  ON stories FOR UPDATE
+  USING (story_data->>'creator_id' = auth.uid()::text);
+
+CREATE POLICY "Users can delete their own stories"
+  ON stories FOR DELETE
+  USING (story_data->>'creator_id' = auth.uid()::text);
+
+CREATE POLICY "Story pages visible to story viewers"
+  ON story_pages FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM stories
+      WHERE stories.id = story_pages.story_id
+      AND (
+        (story_data->>'visibility' = 'public' AND story_data->>'published' = 'true')
+        OR story_data->>'creator_id' = auth.uid()::text
+      )
+    )
+  );
+
+CREATE POLICY "Users can manage their story pages"
+  ON story_pages FOR ALL
+  USING (
+    EXISTS (
+      SELECT 1 FROM stories
+      WHERE stories.id = story_pages.story_id
+      AND story_data->>'creator_id' = auth.uid()::text
+    )
+  );
+
+-- Storage bucket for story images
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('story-images', 'story-images', true)
+ON CONFLICT DO NOTHING;
+```
+
+**story_data structure:**
+```json
+{
+  "title": "The Nest Knows Best",
+  "subtitle": "For Little Ones Learning to Sleep",
+  "author": "PlayfulProcess",
+  "cover_image_url": "story-images/user-id/story-id/cover.png",
+  "visibility": "private",
+  "published": false,
+  "creator_id": "user-uuid-here"
+}
+```
+
+**page_data structure:**
+```json
+{
+  "image_url": "story-images/user-id/story-id/page-1.png",
+  "alt_text": "Bunny sitting under a tree",
+  "narration": "Once upon a time..."
+}
+```
+
+**Future Tables (Phase 2):**
+- `playlists` table (same JSONB approach)
+
+**Schema Location:** See `SIMPLE_JSONB_SCHEMA.md` for complete copy-paste ready schema
 
 ### Auth Setup
 
@@ -469,8 +903,19 @@ console.log('🔢 OTP verification response:', { success, error, hasSession })
 ### Planning Documents (Read These First):
 1. **PROJECT_PLAN.md** - Master plan, all phases, timeline
 2. **AUTH_IMPLEMENTATION_PLAN.md** - Complete auth code + guide
-3. **SUPABASE_SCHEMA_REVISED.md** - Database design (relational)
-4. **AUTH_PORTABILITY.md** - How to copy to other projects
+3. **APPROVAL_PATTERN.md** - ⭐ The Recursive.eco approval pattern (READ THIS!)
+4. **RECOMMENDATION-REVISED.md** - Why we revised from Supabase AI's approach
+5. **supabase-ai-prompt.md** - Full Supabase AI consultation (reference only)
+6. **AUTH_PORTABILITY.md** - How to copy auth to other projects
+
+### Migration Files (Ready to Run):
+1. **supabase/migrations/001-story-approval-revised.sql** - ⭐ USE THIS (revised)
+2. **supabase/migrations/README-REVISED.md** - ⭐ Step-by-step guide (revised)
+3. ~~001-story-approval.sql~~ - Original (deprecated, don't use)
+4. ~~README.md~~ - Original guide (deprecated, don't use)
+
+### Optimization Documentation:
+1. **z.Supabase/BACKLOG_DB_OPTIMIZATIONS.md** - Future improvements (don't over-engineer!)
 
 ### Existing Code (Reference Implementation):
 1. **components/auth/DualAuth.tsx** - ✅ Dual auth (magic link + OTP) + sessionStorage email
@@ -652,22 +1097,265 @@ npx supabase db push
 
 ---
 
-## Current Session Context (Session 3)
+## Current Session Context (Session 10 - Phase 6 Cleanup & Drive Folder Research)
 
-**Date:** 2025-11-03
-**Focus:** Debug auth failures + implement dark mode + OTP fallback
-**Accomplishments:**
-- ✅ Diagnosed root cause: cookie domain configuration bug
-- ✅ Fixed cookie domain logic in client + server files
-- ✅ Converted all auth pages to dark mode
-- ✅ Added OTP input fallback to error page
-- ✅ Dev server tested locally (port 3001)
+**Date:** 2025-11-13
+**Focus:** Clean up unused stories/playlists code, research Gmail/Drive folder batch upload feature
 
-**What User Needs to Do Next:**
-1. **Update Supabase Email Template** (see template below)
-2. Test auth flow locally with real email
-3. Deploy to Vercel and test on production domain
-4. If working, copy auth pattern to other projects
+### What We Completed:
+
+**Phase 6 Cleanup** ✅
+- Removed all unused stories and playlists code from dashboard
+- Deleted `/dashboard/stories/new/page.tsx` (replaced by sequences)
+- Deleted `/dashboard/playlists/new/page.tsx` (replaced by sequences)
+- Removed Story and Playlist TypeScript interfaces
+- Removed stories/playlists state variables and fetch functions
+- Removed dashboard JSX sections for stories and playlists
+- Updated `getStatusBadge()` to use Sequence type
+- **Result:** Dashboard now shows only "My Projects" (sequences section)
+- **Removed:** 1,150 lines of unused code
+- **Build:** Tested and passing ✅
+- **Committed:** 47e220a - "Phase 6 cleanup: Remove unused stories and playlists code"
+
+**Drive Folder Batch Upload Research** ✅
+- Researched Google Drive API v3 for folder file listing
+- **Key Finding:** Public folders DON'T require OAuth! (Can use API key only)
+- **Implementation Estimate:** 2-3 hours (not 2-3 days as initially thought)
+- **Documented in:** PROJECT_PLAN.md Phase 7
+- **User Need:** Currently tedious to add 10+ images (must share each file individually)
+- **Solution:** Paste ONE folder link, app extracts all file URLs automatically
+
+**Technical Approach Documented:**
+- Backend API route: `/api/import-drive-folder`
+- Google Drive API v3 with API key (read-only)
+- Filter files by mimeType (images + videos)
+- Convert to direct URLs (Drive format: `uc?export=view&id=FILE_ID`)
+- Auto-populate bulk textarea for review before import
+- **Limitation:** Only works with publicly shared folders
+- **Priority:** Medium (nice-to-have, not critical)
+
+**Next Steps:**
+- Phase 6 testing on Vercel (user tests)
+- Optionally implement Phase 7 (Drive folder import) if desired
+
+---
+
+## Previous Session Context (Session 9 - Unified Sequence Creator Implementation)
+
+**Date:** 2025-11-12
+**Focus:** Build unified sequence creator (mix images + videos), mobile-first viewer, NO database changes
+
+**Major Accomplishment:** Completed Phases 1-4 of unified sequence creator!
+
+### What We Built:
+
+**Phase 1: Backend (NO DB CHANGES!)** ✅
+- Use existing `document_type: 'creative_work'` (already in database)
+- Identify sequences with `tool_slug: 'sequence'`
+- Zero migrations needed - works with existing schema!
+
+**Phase 2: Unified Creator UI** ✅
+- Created `/dashboard/sequences/new` - mix images AND videos
+- **Dropdown menu:** Add Image or Add Video
+- Type-specific inputs (alt text for images, title for videos)
+- Auto-convert Drive URLs → `uc?export=view&id=FILE_ID` format ✅ (user confirmed working!)
+- Auto-extract YouTube video IDs from any URL format
+- Reorder items with up/down arrows
+- Live thumbnails for both types
+- Proxy wrapping for CORS on Drive images
+
+**Phase 3: Mobile-First React Viewer** ✅
+- Created `/components/viewers/SequenceViewer.tsx`
+- **Design principle:** "If you can swipe through it like Instagram stories, it's simple enough"
+- Primary interaction: **Swipe left/right** (mobile)
+- Secondary: Keyboard arrows (desktop)
+- Large touch targets (56px buttons) - avoid hamburger menu issues
+- Minimal UI: page counter + fullscreen button at bottom
+- No complex overlays or menus in viewer
+- YouTube nocookie embeds with clean UI (`rel=0`, `modestbranding=1`)
+- Site header/navigation unchanged (hamburger stays for site nav)
+
+**Phase 4: Dashboard Integration** ✅
+- Added "My Sequences" section to dashboard (top, green highlight)
+- Fetch sequences: `tool_slug='sequence'` + `document_type='creative_work'`
+- Create/Edit/Delete functionality
+- Shows item count, date, status badges
+- Old stories/playlists sections still exist (safety net for Phase 6 testing)
+
+**Key Technical Decisions:**
+1. **NO database changes** - use existing creative_work type
+2. **Mobile-first viewer** - gestures > buttons, avoid touch issues
+3. **Test before cleanup** - keep old tools until sequences proven working
+4. **Drive format that works:** `https://drive.google.com/uc?export=view&id=FILE_ID`
+
+**Drive URL Fix (Session 9 start):**
+- Reset to bc6a9f9, then updated to use `uc?export=view` format
+- Removed Imgur references (focus on Drive)
+- User confirmed: "The google links are working!"
+
+**Current State:**
+- **Phases 1-4:** Complete and pushed to dev
+- **Phase 5:** Pending - cleanup old story/playlist files
+- **Phase 6:** Pending - testing on Vercel
+- **Strategy:** Test first, cleanup after (safety net approach)
+
+**Files Created:**
+- `/app/dashboard/sequences/new/page.tsx` - Unified creator (562 lines)
+- `/components/viewers/SequenceViewer.tsx` - Mobile-first viewer (229 lines)
+
+**Files Modified:**
+- `/app/dashboard/page.tsx` - Added sequences section
+- `/app/api/proxy-image/route.ts` - Removed Imgur, kept Drive
+- `/PROJECT_PLAN.md` - Documented full plan with 6 phases
+
+**Next Steps (Phase 6 Testing):**
+1. ✅ Commit and push to dev
+2. ✅ Update CLAUDE.md
+3. ⏳ User tests on Vercel
+4. ⏳ Verify Drive images load through proxy
+5. ⏳ Verify YouTube embeds work
+6. ⏳ Test mobile swipe navigation
+7. ⏳ If all good → Phase 5 cleanup (remove old files)
+8. ⏳ If issues → debug with safety net (old code still exists)
+
+---
+
+## Previous Session Context (Session 8 - Unified Viewer Architecture)
+
+**Date:** 2025-11-11
+**Focus:** Pivot from Supabase Storage to URL-based approach, build YouTube playlist creator, plan unified viewer
+
+**Previous Session Summary (Session 7):**
+- ✅ Built story/playlist upload forges with URL-based storage (no file uploads!)
+- ✅ Added Google Drive URL auto-conversion
+- ✅ Created YouTube playlist wrapper with video embeds
+- ✅ Added 'playlist' to document_types (migration 002-add-playlist-type.sql)
+- ✅ Dashboard shows both stories and playlists
+
+**Session 8 Accomplishments:**
+- ✅ **PIVOTED from Supabase Storage to URL-based approach** (Session 7)
+  - Users provide image URLs (Google Drive, Imgur, etc.)
+  - No hosting costs, users own their data
+  - Auto-converts Drive sharing links to direct image URLs
+- ✅ **Built YouTube playlist creator** (`/dashboard/playlists/new`) (Session 7)
+  - Auto-extracts video IDs from any YouTube URL format
+  - YouTube nocookie embeds (privacy-enhanced)
+  - Same approval workflow as stories
+- ✅ **Auto-show preview after saving** (Session 8)
+  - Preview automatically appears with `setShowPreview(true)`
+  - WYSIWYG experience for creators
+- ✅ **Investigated image rendering issues** (Session 8)
+  - No old Supabase Storage code found (completely URL-based)
+  - CORS issues with Drive/Imgur likely cause of rendering failures
+  - Iframe approach should solve this
+- ✅ **UNIFIED VIEWER ARCHITECTURE DECIDED** (Session 8)
+  - Stories + playlists merge into one content viewer
+  - Both are just "sequences of content" (images vs videos)
+  - Build in recursive-landing dev branch, iframe from creator
+- ✅ **Built unified content viewer** (`recursive-landing/pages/content/viewer.html`)
+  - Supports both Supabase (`?id=uuid&type=story|playlist`) and local JSON (`?story=slug`)
+  - Auto-detects content type: renders images OR videos
+  - YouTube nocookie embeds with `rel=0`, `modestbranding=1`
+  - All existing features: fullscreen, swipe, keyboard, wheel navigation
+  - 480 lines of vanilla JS with Supabase client integration
+- ✅ **Updated recursive-creator preview iframes**
+  - Story preview: Points to `dev.recursive.eco/pages/content/viewer.html?id={id}&type=story`
+  - Playlist preview: Points to `dev.recursive.eco/pages/content/viewer.html?id={id}&type=playlist`
+  - Replaced ~105 lines of inline preview code with ~12 lines of iframe
+  - Cleaner codebase, single source of truth for rendering
+- ✅ **Deployed dev branch to dev.recursive.eco**
+  - Dev branch `dev-unified-viewer` created and pushed
+  - Production stays stable on main branch
+  - Ready for testing
+
+**Key Insight:**
+Both stories and playlists are **sequences of content**. Instead of separate viewers:
+- One unified viewer handles images AND videos
+- YouTube wrapper provides: narrative context, clean embeds, safer UX, community reviews
+- Future: Mix images + videos in same sequence (story page → video → story page)
+
+**YouTube Wrapper Value Proposition:**
+1. 🎭 **Narrative Context** - Add story pages before/after videos as "chapters"
+2. 🧹 **Clean YouTube Embeds** - Hide related videos (youtube-nocookie.com, rel=0)
+3. 🛡️ **Safer for Kids** - Bounded experience, can't navigate away
+4. 💬 **Community Reviews** - Trusted recommendations (future)
+
+**Session 8 Testing Instructions (PLEASE TEST!):**
+
+The unified viewer architecture is complete and deployed to `dev.recursive.eco`. Here's what to test:
+
+**Test 1: Story Creation with Drive/Imgur Images**
+1. Go to `creator.recursive.eco/dashboard/stories/new`
+2. Create a new story with:
+   - Title: "Test Story"
+   - Subtitle: "Testing Drive/Imgur images"
+   - Author: Your name
+3. Add pages with image URLs from:
+   - Google Drive (sharing link format)
+   - Imgur (direct link)
+   - Any other image hosting service
+4. Click "Save New Draft"
+5. **Check:** Does the preview automatically appear? ✅/❌
+6. **Check:** Do the images render correctly in the preview iframe? ✅/❌
+7. **Check:** Can you navigate between pages (swipe, arrows, keyboard)? ✅/❌
+8. **Check:** Does fullscreen mode work? ✅/❌
+
+**Test 2: Playlist Creation with YouTube Videos**
+1. Go to `creator.recursive.eco/dashboard/playlists/new`
+2. Create a new playlist with:
+   - Title: "Test Playlist"
+   - Description: "Testing YouTube embeds"
+   - Category: "Kids"
+3. Add videos with various YouTube URL formats:
+   - `https://youtube.com/watch?v=VIDEO_ID`
+   - `https://youtu.be/VIDEO_ID`
+   - Direct video ID: `VIDEO_ID`
+4. Click "Save Playlist"
+5. **Check:** Does the preview automatically appear? ✅/❌
+6. **Check:** Do the videos embed correctly? ✅/❌
+7. **Check:** Are related videos hidden (clean YouTube UX)? ✅/❌
+8. **Check:** Can you navigate between videos? ✅/❌
+
+**Test 3: CORS Issue Resolution**
+1. Use a Google Drive image that previously failed to render
+2. Create a story with that image
+3. **Check:** Does it render in the iframe preview? ✅/❌
+4. **Expected:** Iframe should solve CORS issues (if not, we'll need proxy)
+
+**Test 4: Navigation & UX**
+1. In both story and playlist previews:
+2. **Check:** Swipe left/right works on mobile? ✅/❌
+3. **Check:** Keyboard arrow keys work? ✅/❌
+4. **Check:** Mouse wheel scrolling works? ✅/❌
+5. **Check:** Fullscreen button works? ✅/❌
+6. **Check:** Page counter shows correctly? ✅/❌
+
+**Expected Results:**
+- ✅ Preview auto-shows after saving
+- ✅ Drive/Imgur images render (CORS solved by iframe)
+- ✅ YouTube videos embed cleanly (no related videos)
+- ✅ All navigation methods work (swipe, keyboard, wheel)
+- ✅ Fullscreen mode works
+- ✅ Mobile-responsive design
+
+**If Issues Found:**
+1. Take screenshots of errors
+2. Check browser console for error messages
+3. Note which specific images/videos fail
+4. We'll debug together in next session
+
+**Next Steps After Testing:**
+1. If all tests pass → Merge dev branch to main in recursive-landing
+2. Update iframe URLs in recursive-creator to point to main (recursive.eco)
+3. Deploy to production
+4. Move to Phase 2: Admin dashboard for story approval
+
+**Current Files:**
+- ✅ `app/dashboard/stories/new/page.tsx` - URL-based story creator
+- ✅ `app/dashboard/playlists/new/page.tsx` - YouTube playlist creator
+- ✅ `app/dashboard/page.tsx` - Dashboard with both stories and playlists
+- ✅ `supabase/migrations/002-add-playlist-type.sql` - Playlist document type
+- ⏳ `recursive-landing/pages/content/viewer.html` - To be created in dev branch
 
 **Supabase Email Template (Magic Link + OTP):**
 

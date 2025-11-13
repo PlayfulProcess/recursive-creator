@@ -1,40 +1,20 @@
 'use client';
 
-import { useEffect } from 'react';
+import Image from 'next/image';
 
 export function Footer() {
-  useEffect(() => {
-    // Initialize spiral after component mounts
-    const initSpiral = () => {
-      if (typeof window !== 'undefined' && (window as any).createSpiral) {
-        const container = document.getElementById('footer-logo-container');
-        if (container) {
-          (window as any).createSpiral(container, {
-            size: 100,
-            turns: 6,
-            color: '#ffffff',
-            strokeWidth: 0.8,
-            opacity: 0.6,
-            animated: true
-          });
-        }
-      }
-    };
-
-    // Try immediately, then retry after short delay
-    initSpiral();
-    const timer = setTimeout(initSpiral, 100);
-    return () => clearTimeout(timer);
-  }, []);
-
   return (
     <footer className="bg-gray-900 text-white py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center">
           <div className="flex items-center justify-center mb-4">
-            <div id="footer-logo-container" className="h-24 w-24">
-              {/* Animated spiral logo will be inserted here by JavaScript */}
-            </div>
+            <Image
+              src="/recursive-logo.svg"
+              alt="Recursive.eco"
+              width={100}
+              height={100}
+              className="h-24 w-auto opacity-60"
+            />
           </div>
 
           <div className="bg-amber-800 text-amber-200 p-4 rounded-lg mb-6 max-w-2xl mx-auto">
