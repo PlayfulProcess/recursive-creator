@@ -1,9 +1,9 @@
 # Context for Claude Code: Recursive Creator Project
 
-> **Last Updated:** 2025-11-13 (Session 10 - Phase 6 Cleanup Complete!)
-> **Current Phase:** Phase 6 COMPLETE - Cleanup Done, Drive Folder Feature Planned
-> **Status:** Phases 1-6 complete, unified sequence creator ready for production
-> **Next Steps:** Phase 6 testing on Vercel, optional Phase 7 (Drive folder import)
+> **Last Updated:** 2025-11-13 (Session 11 - Phase 7 Complete & Deployed!)
+> **Current Phase:** Phase 7 COMPLETE - Drive Folder Import Live in Production
+> **Status:** All phases complete, unified sequence creator deployed and tested on Vercel
+> **Next Steps:** Production use, gather user feedback, iterate on features
 
 ---
 
@@ -1097,7 +1097,59 @@ npx supabase db push
 
 ---
 
-## Current Session Context (Session 10 - Phase 6 Cleanup & Drive Folder Research)
+## Current Session Context (Session 11 - Phase 7 Implementation & Deployment)
+
+**Date:** 2025-11-13
+**Focus:** Implement Drive folder batch upload, deploy to Vercel, fix bugs
+
+### What We Accomplished:
+
+**Phase 7: Drive Folder Import** ✅ COMPLETE
+- Created backend API route `/api/import-drive-folder`
+- Uses Google Drive API v3 with API key (no OAuth needed!)
+- Filters for images and videos, sorts alphabetically by filename
+- Frontend: Added "📁 Import Folder" button + modal
+- Auto-populates bulk textarea with imported URLs
+- Works with publicly shared Drive folders
+- **Implementation time:** ~2 hours (as estimated)
+
+**Deployment to Vercel** ✅
+- Merged dev → main, force pushed to trigger deployment
+- Fixed old commit issue (was deploying 58 commits behind!)
+- Domain configuration verified (creator.recursive.eco)
+- Deployed commit: b7e2aff
+- **Status:** Live and working in production!
+
+**Bug Fixes Based on User Feedback** ✅
+1. **Save button:** Added better error validation and logging
+2. **Alphabetical sorting:** Imported files now sorted by filename
+3. **CSP errors:** Documented as expected (Google Drive security)
+
+**Testing Results:**
+- ✅ Drive folder import working
+- ✅ Alphabetical sorting working
+- ✅ Save button working
+- ✅ All features tested and confirmed by user
+
+**Key Files:**
+- `/app/api/import-drive-folder/route.ts` - Backend API (133 lines)
+- `/app/dashboard/sequences/new/page.tsx` - Frontend UI updates
+- **Commits:** 03a95a6 (Phase 7), d6e0dd3 (trigger deploy), b7e2aff (bug fixes)
+
+**Environment Variables Needed:**
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `GOOGLE_DRIVE_API_KEY` (new!)
+
+**Lessons Learned:**
+- Vercel can deploy old commits if not monitored carefully
+- Public Drive folders don't require OAuth (huge simplification!)
+- Force redeploy: empty commit or Vercel dashboard
+- CSP errors for Google Drive framing are expected and normal
+
+---
+
+## Previous Session Context (Session 10 - Phase 6 Cleanup & Drive Folder Research)
 
 **Date:** 2025-11-13
 **Focus:** Clean up unused stories/playlists code, research Gmail/Drive folder batch upload feature
