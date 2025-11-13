@@ -345,6 +345,98 @@ app/api/proxy-image/route.ts
 
 ---
 
+## Phase 7: Enhanced Bulk Upload (Future Enhancement)
+
+### Drive Folder Import Feature
+
+**User Need:** Currently, adding 10+ images from a Drive folder requires manually sharing and pasting each file link individually - tedious for creators making 15-20 page stories.
+
+**Proposed Solution:** Import all files from a publicly shared Google Drive folder link in one action.
+
+**User Flow:**
+```
+1. User pastes ONE folder link: https://drive.google.com/drive/folders/FOLDER_ID
+2. User clicks "Import from Folder" button
+3. App automatically extracts all image/video file links
+4. Bulk textarea auto-populates with individual file URLs
+5. User clicks "Update Sidebar" - all items added at once!
+```
+
+**Technical Approach:**
+
+**Backend API Route:** `/api/import-drive-folder`
+```typescript
+// Input: Drive folder share link
+// Output: Array of file URLs
+
+export async function POST(req: Request) {
+  const { folderUrl } = await req.json();
+
+  // 1. Extract folder ID from URL (regex)
+  const folderId = extractFolderId(folderUrl);
+
+  // 2. Call Drive API v3 with API key (no OAuth for public folders!)
+  const response = await fetch(
+    `https://www.googleapis.com/drive/v3/files?` +
+    `q='${folderId}'+in+parents&` +
+    `fields=files(id,name,mimeType)&` +
+    `key=${process.env.GOOGLE_DRIVE_API_KEY}`
+  );
+
+  // 3. Filter for images and videos
+  const files = response.files.filter(file =>
+    file.mimeType.startsWith('image/') ||
+    file.mimeType.startsWith('video/')
+  );
+
+  // 4. Convert to direct URLs
+  const urls = files.map(file => {
+    if (file.mimeType.startsWith('video/')) {
+      return `video: https://drive.google.com/file/d/${file.id}/view`;
+    } else {
+      return `https://drive.google.com/uc?export=view&id=${file.id}`;
+    }
+  });
+
+  return Response.json({ urls });
+}
+```
+
+**Frontend Integration:**
+- Add "Import from Drive Folder" button next to bulk textarea
+- Show modal: "Paste folder link here"
+- Call API route, get URLs back
+- Auto-fill bulk textarea with one URL per line
+- User can review/edit before clicking "Update Sidebar"
+
+**Requirements:**
+- **Google Cloud API key** (free, 5 minutes to set up)
+- **Environment variable:** `GOOGLE_DRIVE_API_KEY` in `.env.local`
+- **Limitation:** Only works with publicly shared folders ("Anyone with link can view")
+- **Privacy:** No OAuth needed, no user data accessed, read-only API calls
+
+**Implementation Estimate:** 2-3 hours
+- 30 min: Get Google Cloud API key
+- 60 min: Build backend API route with Drive API integration
+- 30 min: Add frontend button + modal
+- 30 min: Testing with various folder sizes
+
+**Benefits:**
+- ✅ **10x faster** for bulk uploads (1 paste vs 20 pastes)
+- ✅ **Parent-friendly** - less technical friction
+- ✅ **No OAuth complexity** - works with public folders immediately
+- ✅ **Fallback exists** - manual URL pasting still works
+- ✅ **Incremental enhancement** - doesn't break existing workflow
+
+**Trade-offs:**
+- ⚠️ Only works with public folders (not private Drive folders)
+- ⚠️ Requires API key management (add to deployment env vars)
+- ⚠️ Subject to Drive API quotas (unlikely to hit with small-scale use)
+
+**Priority:** Medium (nice-to-have, not critical for MVP)
+
+---
+
 ## Architecture Decision: Hybrid Approach
 
 ### The Challenge

@@ -1,9 +1,9 @@
 # Context for Claude Code: Recursive Creator Project
 
-> **Last Updated:** 2025-11-12 (Session 9 - Unified Sequence Creator Built!)
-> **Current Phase:** Phase 4 COMPLETE - Ready for Phase 6 Testing
-> **Status:** Phases 1-4 complete, old tools still exist (safety net)
-> **Next Steps:** Test on Vercel, then Phase 5 cleanup (remove old files)
+> **Last Updated:** 2025-11-13 (Session 10 - Phase 6 Cleanup Complete!)
+> **Current Phase:** Phase 6 COMPLETE - Cleanup Done, Drive Folder Feature Planned
+> **Status:** Phases 1-6 complete, unified sequence creator ready for production
+> **Next Steps:** Phase 6 testing on Vercel, optional Phase 7 (Drive folder import)
 
 ---
 
@@ -1097,7 +1097,50 @@ npx supabase db push
 
 ---
 
-## Current Session Context (Session 9 - Unified Sequence Creator Implementation)
+## Current Session Context (Session 10 - Phase 6 Cleanup & Drive Folder Research)
+
+**Date:** 2025-11-13
+**Focus:** Clean up unused stories/playlists code, research Gmail/Drive folder batch upload feature
+
+### What We Completed:
+
+**Phase 6 Cleanup** ✅
+- Removed all unused stories and playlists code from dashboard
+- Deleted `/dashboard/stories/new/page.tsx` (replaced by sequences)
+- Deleted `/dashboard/playlists/new/page.tsx` (replaced by sequences)
+- Removed Story and Playlist TypeScript interfaces
+- Removed stories/playlists state variables and fetch functions
+- Removed dashboard JSX sections for stories and playlists
+- Updated `getStatusBadge()` to use Sequence type
+- **Result:** Dashboard now shows only "My Projects" (sequences section)
+- **Removed:** 1,150 lines of unused code
+- **Build:** Tested and passing ✅
+- **Committed:** 47e220a - "Phase 6 cleanup: Remove unused stories and playlists code"
+
+**Drive Folder Batch Upload Research** ✅
+- Researched Google Drive API v3 for folder file listing
+- **Key Finding:** Public folders DON'T require OAuth! (Can use API key only)
+- **Implementation Estimate:** 2-3 hours (not 2-3 days as initially thought)
+- **Documented in:** PROJECT_PLAN.md Phase 7
+- **User Need:** Currently tedious to add 10+ images (must share each file individually)
+- **Solution:** Paste ONE folder link, app extracts all file URLs automatically
+
+**Technical Approach Documented:**
+- Backend API route: `/api/import-drive-folder`
+- Google Drive API v3 with API key (read-only)
+- Filter files by mimeType (images + videos)
+- Convert to direct URLs (Drive format: `uc?export=view&id=FILE_ID`)
+- Auto-populate bulk textarea for review before import
+- **Limitation:** Only works with publicly shared folders
+- **Priority:** Medium (nice-to-have, not critical)
+
+**Next Steps:**
+- Phase 6 testing on Vercel (user tests)
+- Optionally implement Phase 7 (Drive folder import) if desired
+
+---
+
+## Previous Session Context (Session 9 - Unified Sequence Creator Implementation)
 
 **Date:** 2025-11-12
 **Focus:** Build unified sequence creator (mix images + videos), mobile-first viewer, NO database changes
