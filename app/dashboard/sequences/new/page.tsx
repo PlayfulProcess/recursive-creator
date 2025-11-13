@@ -380,6 +380,9 @@ function NewSequencePageContent() {
         // UPDATE MODE: Save over existing project
         const wasPublished = publishedUrl !== null; // Track if was already published
 
+        console.log('💾 Saving with isPublished state:', isPublished);
+        console.log('💾 is_active will be set to:', isPublished ? 'true' : 'false');
+
         const { data: updateData, error: updateError } = await supabase
           .from('user_documents')
           .update({
@@ -399,8 +402,11 @@ function NewSequencePageContent() {
 
         if (updateError) throw updateError;
 
-        // Send email if newly published (wasn't published before, now is)
+        console.log('✅ Database updated. Returned data:', updateData?.document_data?.is_active);
+
+        // Send emails if newly published (wasn't published before, now is)
         if (isPublished && !wasPublished) {
+          console.log('📧 Sending publish notification emails...');
           try {
             await fetch('/api/notify-publish', {
               method: 'POST',
@@ -410,9 +416,11 @@ function NewSequencePageContent() {
                 title: title.trim(),
                 description: description.trim(),
                 itemCount: validItems.length,
-                userId: user.id
+                userId: user.id,
+                userEmail: user.email
               })
             });
+            console.log('✅ Email notifications sent');
           } catch (err) {
             // Silent fail - don't block user workflow
             console.error('Failed to send publish notification:', err);
@@ -431,6 +439,9 @@ function NewSequencePageContent() {
         const baseSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
         const timestamp = Date.now();
         const slug = `${baseSlug}-${timestamp}`;
+
+        console.log('💾 Creating new project with isPublished:', isPublished);
+        console.log('💾 is_active will be set to:', isPublished ? 'true' : 'false');
 
         const { data: insertData, error: insertError } = await supabase
           .from('user_documents')
@@ -453,12 +464,15 @@ function NewSequencePageContent() {
 
         if (insertError) throw insertError;
 
+        console.log('✅ Project created. is_active =', insertData?.document_data?.is_active);
+
         if (!insertData || !insertData.id) {
           throw new Error('Failed to create project: No ID returned');
         }
 
-        // Send email if published
+        // Send emails if published
         if (isPublished) {
+          console.log('📧 Sending publish notification emails...');
           try {
             await fetch('/api/notify-publish', {
               method: 'POST',
@@ -468,9 +482,11 @@ function NewSequencePageContent() {
                 title: title.trim(),
                 description: description.trim(),
                 itemCount: validItems.length,
-                userId: user.id
+                userId: user.id,
+                userEmail: user.email
               })
             });
+            console.log('✅ Email notifications sent');
           } catch (err) {
             // Silent fail - don't block user workflow
             console.error('Failed to send publish notification:', err);
@@ -794,46 +810,44 @@ function NewSequencePageContent() {
 
           {/* Actions */}
           <div className="bg-gray-800 rounded-lg shadow-lg p-6">
-            {/* Publish Toggle */}
-            <div className="mb-6 p-4 bg-gray-700/50 rounded-lg border border-gray-600">
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={isPublished}
-                  onChange={(e) => setIsPublished(e.target.checked)}
-                  className="w-5 h-5 rounded border-gray-500 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800"
-                />
-                <div className="ml-3 flex-1">
-                  <div className="text-sm font-medium text-white">
-                    Publish this project
-                  </div>
-                  <div className="text-xs text-gray-400">
-                    Make it publicly accessible at https://recursive.eco/view/...
-                    {isPublished && ' (You will receive an email confirmation)'}
-                  </div>
-                </div>
-              </label>
-            </div>
-
             <div className="flex gap-4">
               <button
-                onClick={handleSaveDraft}
+                onClick={() => {
+                  setIsPublished(false);
+                  handleSaveDraft();
+                }}
                 disabled={saving || !title.trim() || items.length === 0}
-                className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="flex-1 px-6 py-3 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {saving ? 'Saving...' : (editingId ? 'Save Changes' : 'Save New Project')}
+                {saving ? 'Saving...' : (editingId ? 'Save as Draft' : 'Save Draft')}
+              </button>
+
+              <button
+                onClick={() => {
+                  console.log('🚀 Publish button clicked - setting isPublished to true');
+                  setIsPublished(true);
+                  // Use setTimeout to ensure state update happens before save
+                  setTimeout(() => handleSaveDraft(), 50);
+                }}
+                disabled={saving || !title.trim() || items.length === 0}
+                className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {saving ? 'Publishing...' : '🌐 Publish Project'}
               </button>
 
               {editingId && (
                 <button
                   onClick={handleSaveAsNew}
                   disabled={saving || !title.trim() || items.length === 0}
-                  className="px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Save As New
                 </button>
               )}
             </div>
+            <p className="text-xs text-gray-500 mt-3 text-center">
+              Draft = Private | Publish = Public URL at https://recursive.eco/view/...
+            </p>
           </div>
 
           {/* Live Preview */}

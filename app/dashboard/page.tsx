@@ -105,15 +105,15 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-900">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-8">
         {/* Projects Section - NEW! Mix images + videos */}
-        <div className="bg-white rounded-lg shadow p-6 border-2 border-green-200">
+        <div className="bg-gray-800 rounded-lg shadow p-6 border-2 border-green-600">
           <div className="flex justify-between items-center mb-6">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">My Projects</h2>
-              <p className="text-sm text-gray-600 mt-1">Mix images and videos in any order</p>
+              <h2 className="text-2xl font-bold text-white">My Projects</h2>
+              <p className="text-sm text-gray-400 mt-1">Mix images and videos in any order</p>
             </div>
             <button
               onClick={() => router.push('/dashboard/sequences/new')}
@@ -124,13 +124,13 @@ export default function DashboardPage() {
           </div>
 
           {loading ? (
-            <p className="text-gray-600 text-sm">Loading projects...</p>
+            <p className="text-gray-400 text-sm">Loading projects...</p>
           ) : sequences.length === 0 ? (
-            <div className="text-center py-8 bg-green-50 rounded-lg">
-              <p className="text-gray-600 text-sm mb-2">
+            <div className="text-center py-8 bg-gray-700/50 rounded-lg">
+              <p className="text-gray-300 text-sm mb-2">
                 You haven't created any projects yet.
               </p>
-              <p className="text-gray-500 text-xs">
+              <p className="text-gray-400 text-xs">
                 Projects let you mix images and videos to create rich multimedia experiences!
               </p>
             </div>
@@ -139,11 +139,11 @@ export default function DashboardPage() {
               {sequences.map((sequence) => (
                 <div
                   key={sequence.id}
-                  className="border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-colors"
+                  className="border border-gray-700 rounded-lg p-4 hover:border-gray-600 transition-colors bg-gray-750"
                 >
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-900">
+                      <h3 className="text-lg font-semibold text-white">
                         {sequence.document_data.title}
                       </h3>
 
@@ -185,16 +185,16 @@ export default function DashboardPage() {
                       )}
 
                       {sequence.document_data.description && (
-                        <p className="text-sm text-gray-600 mt-1">
+                        <p className="text-sm text-gray-400 mt-1">
                           {sequence.document_data.description}
                         </p>
                       )}
                       <div className="flex items-center gap-3 mt-2">
-                        <p className="text-sm text-gray-500">
+                        <p className="text-sm text-gray-400">
                           {sequence.document_data.items?.length || 0} items
                         </p>
-                        <span className="text-gray-300">•</span>
-                        <p className="text-sm text-gray-500">
+                        <span className="text-gray-600">•</span>
+                        <p className="text-sm text-gray-400">
                           {new Date(sequence.created_at).toLocaleDateString()}
                         </p>
                       </div>
