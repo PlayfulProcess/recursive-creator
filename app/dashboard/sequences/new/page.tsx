@@ -69,7 +69,7 @@ function NewSequencePageContent() {
 
       setTitle(data.document_data.title || '');
       setDescription(data.document_data.description || '');
-      setIsPublished(data.document_data.is_active === 'true');
+      setIsPublished(data.is_public || false);
 
       if (data.document_data.items && data.document_data.items.length > 0) {
         // Unwrap double-proxied URLs from old data
@@ -384,15 +384,15 @@ function NewSequencePageContent() {
         const wasPublished = publishedUrl !== null; // Track if was already published
 
         console.log('💾 Saving with shouldPublish:', shouldPublish);
-        console.log('💾 is_active will be set to:', shouldPublish ? 'true' : 'false');
+        console.log('💾 is_public will be set to:', shouldPublish);
 
         const { data: updateData, error: updateError } = await supabase
           .from('user_documents')
           .update({
+            is_public: shouldPublish,  // Update the column directly
             document_data: {
               title: title.trim(),
               description: description.trim(),
-              is_active: shouldPublish ? 'true' : 'false',
               reviewed: 'false',
               creator_id: user.id,
               items: validItems  // Save raw URLs, no proxy wrapping
@@ -405,7 +405,7 @@ function NewSequencePageContent() {
 
         if (updateError) throw updateError;
 
-        console.log('✅ Database updated. Returned data:', updateData?.document_data?.is_active);
+        console.log('✅ Database updated. is_public =', updateData?.is_public);
 
         // Send emails if newly published (wasn't published before, now is)
         if (shouldPublish && !wasPublished) {
@@ -446,7 +446,7 @@ function NewSequencePageContent() {
         const slug = `${baseSlug}-${timestamp}`;
 
         console.log('💾 Creating new project with shouldPublish:', shouldPublish);
-        console.log('💾 is_active will be set to:', shouldPublish ? 'true' : 'false');
+        console.log('💾 is_public will be set to:', shouldPublish);
 
         const { data: insertData, error: insertError } = await supabase
           .from('user_documents')
@@ -455,10 +455,10 @@ function NewSequencePageContent() {
             document_type: 'creative_work',
             tool_slug: 'sequence',
             story_slug: slug,
+            is_public: shouldPublish,  // Set the column directly
             document_data: {
               title: title.trim(),
               description: description.trim(),
-              is_active: shouldPublish ? 'true' : 'false',
               reviewed: 'false',
               creator_id: user.id,
               items: validItems  // Save raw URLs, no proxy wrapping
@@ -469,7 +469,7 @@ function NewSequencePageContent() {
 
         if (insertError) throw insertError;
 
-        console.log('✅ Project created. is_active =', insertData?.document_data?.is_active);
+        console.log('✅ Project created. is_public =', insertData?.is_public);
 
         if (!insertData || !insertData.id) {
           throw new Error('Failed to create project: No ID returned');

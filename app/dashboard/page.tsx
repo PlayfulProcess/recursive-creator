@@ -9,10 +9,10 @@ interface Sequence {
   id: string;
   tool_slug: string;
   story_slug: string;
+  is_public: boolean;
   document_data: {
     title: string;
     description?: string;
-    is_active: string;
     reviewed: string;
     items?: any[];
   };
@@ -95,12 +95,12 @@ export default function DashboardPage() {
   }
 
   const getStatusBadge = (sequence: Sequence) => {
-    if (sequence.document_data.is_active === 'true') {
+    if (sequence.is_public) {
       return <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded">Published</span>;
     } else if (sequence.document_data.reviewed === 'true') {
       return <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded">Rejected</span>;
     } else {
-      return <span className="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded">Pending</span>;
+      return <span className="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded">Draft</span>;
     }
   };
 
@@ -148,8 +148,8 @@ export default function DashboardPage() {
                       </h3>
 
                       {/* Show public URL if published */}
-                      {sequence.document_data.is_active === 'true' && (
-                        <div className="mt-2 flex items-center gap-2 bg-blue-50 p-2 rounded-lg">
+                      {sequence.is_public && (
+                        <div className="mt-2 flex items-center gap-2 bg-blue-900/30 p-2 rounded-lg border border-blue-700">
                           <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded font-medium whitespace-nowrap">
                             🌐 Published
                           </span>
