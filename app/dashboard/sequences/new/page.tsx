@@ -383,9 +383,6 @@ function NewSequencePageContent() {
         // UPDATE MODE: Save over existing project
         const wasPublished = publishedUrl !== null; // Track if was already published
 
-        console.log('💾 Saving with shouldPublish:', shouldPublish);
-        console.log('💾 is_public will be set to:', shouldPublish);
-
         const { data: updateData, error: updateError } = await supabase
           .from('user_documents')
           .update({
@@ -405,11 +402,8 @@ function NewSequencePageContent() {
 
         if (updateError) throw updateError;
 
-        console.log('✅ Database updated. is_public =', updateData?.is_public);
-
         // Send emails if newly published (wasn't published before, now is)
         if (shouldPublish && !wasPublished) {
-          console.log('📧 Sending publish notification emails...');
           try {
             await fetch('/api/notify-publish', {
               method: 'POST',
@@ -423,7 +417,6 @@ function NewSequencePageContent() {
                 userEmail: user.email
               })
             });
-            console.log('✅ Email notifications sent');
           } catch (err) {
             // Silent fail - don't block user workflow
             console.error('Failed to send publish notification:', err);
@@ -444,9 +437,6 @@ function NewSequencePageContent() {
         const baseSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
         const timestamp = Date.now();
         const slug = `${baseSlug}-${timestamp}`;
-
-        console.log('💾 Creating new project with shouldPublish:', shouldPublish);
-        console.log('💾 is_public will be set to:', shouldPublish);
 
         const { data: insertData, error: insertError } = await supabase
           .from('user_documents')
@@ -469,15 +459,12 @@ function NewSequencePageContent() {
 
         if (insertError) throw insertError;
 
-        console.log('✅ Project created. is_public =', insertData?.is_public);
-
         if (!insertData || !insertData.id) {
           throw new Error('Failed to create project: No ID returned');
         }
 
         // Send emails if published
         if (shouldPublish) {
-          console.log('📧 Sending publish notification emails...');
           try {
             await fetch('/api/notify-publish', {
               method: 'POST',
@@ -491,7 +478,6 @@ function NewSequencePageContent() {
                 userEmail: user.email
               })
             });
-            console.log('✅ Email notifications sent');
           } catch (err) {
             // Silent fail - don't block user workflow
             console.error('Failed to send publish notification:', err);
@@ -504,7 +490,6 @@ function NewSequencePageContent() {
         }
 
         setSuccess(true);
-        console.log('✅ Project created successfully:', insertData.id);
         // Transition to edit mode
         router.push(`/dashboard/sequences/new?id=${insertData.id}`);
       }
@@ -698,8 +683,7 @@ function NewSequencePageContent() {
                   <textarea
                     value={bulkUrls}
                     onChange={(e) => setBulkUrls(e.target.value)}
-                    rows={8}
-                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                    className="w-full h-[600px] px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono resize-none overflow-y-auto"
                     placeholder="https://drive.google.com/file/d/... (defaults to image)&#10;video: https://drive.google.com/file/d/... (Drive video)&#10;https://youtube.com/watch?v=..."
                   />
                   <p className="text-xs text-gray-500 mt-2">
@@ -820,10 +804,7 @@ function NewSequencePageContent() {
           <div className="bg-gray-800 rounded-lg shadow-lg p-6">
             <div className="flex gap-4">
               <button
-                onClick={() => {
-                  console.log('📝 Save Draft button clicked');
-                  handleSaveDraft(false);  // Force to draft mode
-                }}
+                onClick={() => handleSaveDraft(false)}  // Force to draft mode
                 disabled={saving || !title.trim() || items.length === 0}
                 className="flex-1 px-6 py-3 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
@@ -831,10 +812,7 @@ function NewSequencePageContent() {
               </button>
 
               <button
-                onClick={() => {
-                  console.log('🚀 Publish button clicked');
-                  handleSaveDraft(true);  // Force to published mode
-                }}
+                onClick={() => handleSaveDraft(true)}  // Force to published mode
                 disabled={saving || !title.trim() || items.length === 0}
                 className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
