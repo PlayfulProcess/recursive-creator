@@ -565,24 +565,6 @@ function NewSequencePageContent() {
 
   return (
     <div className="min-h-screen bg-gray-900">
-      <nav className="bg-gray-800 shadow-sm border-b border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={() => router.push('/dashboard')}
-                className="text-gray-400 hover:text-white"
-              >
-                ← Back
-              </button>
-              <h1 className="text-xl font-bold text-white">
-                {editingId ? 'Edit Project' : 'Create New Project'}
-              </h1>
-            </div>
-          </div>
-        </div>
-      </nav>
-
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-8">
           {/* Metadata */}
@@ -680,12 +662,24 @@ function NewSequencePageContent() {
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     Paste URLs (one per line or comma-separated)
                   </label>
-                  <textarea
-                    value={bulkUrls}
-                    onChange={(e) => setBulkUrls(e.target.value)}
-                    className="w-full h-[300px] px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono resize-none overflow-y-auto"
-                    placeholder="https://drive.google.com/file/d/... (defaults to image)&#10;video: https://drive.google.com/file/d/... (Drive video)&#10;https://youtube.com/watch?v=..."
-                  />
+                  <div className="relative flex border border-gray-600 rounded-lg overflow-hidden bg-gray-700">
+                    {/* Line numbers */}
+                    <div className="flex-shrink-0 bg-gray-800 px-2 py-2 text-gray-500 text-sm font-mono select-none border-r border-gray-600">
+                      {bulkUrls.split('\n').map((_, i) => (
+                        <div key={i} className="text-right leading-5 h-5">
+                          {i + 1}
+                        </div>
+                      ))}
+                    </div>
+                    {/* Textarea */}
+                    <textarea
+                      value={bulkUrls}
+                      onChange={(e) => setBulkUrls(e.target.value)}
+                      className="flex-1 h-[40vh] px-4 py-2 bg-gray-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono resize-none overflow-y-auto leading-5"
+                      placeholder="https://drive.google.com/file/d/... (defaults to image)&#10;video: https://drive.google.com/file/d/... (Drive video)&#10;https://youtube.com/watch?v=..."
+                      style={{ outline: 'none' }}
+                    />
+                  </div>
                   <p className="text-xs text-gray-500 mt-2">
                     ✨ Auto-detects YouTube videos. Drive defaults to images. Prefix with <code className="bg-gray-600 px-1 rounded">video:</code> for Drive videos.
                   </p>
