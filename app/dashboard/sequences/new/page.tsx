@@ -676,64 +676,77 @@ function NewSequencePageContent() {
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     Paste URLs (one per line or comma-separated)
                   </label>
-                  <div className="relative flex border border-gray-600 rounded-lg overflow-hidden bg-gray-700">
-                    {/* Line numbers with file names */}
-                    <div className="flex-shrink-0 bg-gray-800 px-2 py-2 text-gray-500 text-sm font-mono select-none border-r border-gray-600 overflow-y-auto max-h-[40vh]">
-                      {bulkUrls.split('\n').map((line, i) => {
-                        // Extract filename from URL
-                        let fileName = '';
-                        if (line.trim()) {
-                          try {
-                            // Remove "video:" prefix if present
-                            const cleanLine = line.replace(/^video:\s*/i, '').trim();
+                  <div className="border border-gray-600 rounded-lg bg-gray-700">
+                    {/* Table-like layout: Line# | Filename | URL */}
+                    <div className="h-[40vh] overflow-y-auto">
+                      <div className="flex flex-col font-mono text-sm">
+                        {bulkUrls.split('\n').map((line, i) => {
+                          // Extract filename from URL
+                          let fileName = '';
+                          if (line.trim()) {
+                            try {
+                              // Remove "video:" prefix if present
+                              const cleanLine = line.replace(/^video:\s*/i, '').trim();
 
-                            // Try to extract filename
-                            if (cleanLine.includes('drive.google.com')) {
-                              // For Drive URLs, just show "Drive file"
-                              fileName = 'Drive';
-                            } else if (cleanLine.includes('youtube.com') || cleanLine.includes('youtu.be')) {
-                              // For YouTube, show video ID or "YouTube"
-                              const videoIdMatch = cleanLine.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-                              fileName = videoIdMatch ? `YT:${videoIdMatch[1].substring(0, 6)}` : 'YouTube';
-                            } else {
-                              // Try to get filename from URL
-                              const urlParts = cleanLine.split('/');
-                              const lastPart = urlParts[urlParts.length - 1];
-                              if (lastPart) {
-                                // Remove query params and decode
-                                fileName = decodeURIComponent(lastPart.split('?')[0]);
-                                // Truncate if too long
-                                if (fileName.length > 15) {
-                                  fileName = fileName.substring(0, 12) + '...';
+                              // Try to extract filename
+                              if (cleanLine.includes('drive.google.com')) {
+                                // Try to extract file ID and use as identifier
+                                const idMatch = cleanLine.match(/\/d\/([a-zA-Z0-9_-]+)/);
+                                fileName = idMatch ? `Drive: ${idMatch[1].substring(0, 8)}...` : 'Drive file';
+                              } else if (cleanLine.includes('youtube.com') || cleanLine.includes('youtu.be')) {
+                                // For YouTube, show video ID
+                                const videoIdMatch = cleanLine.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+                                fileName = videoIdMatch ? `YT: ${videoIdMatch[1]}` : 'YouTube';
+                              } else {
+                                // Try to get filename from URL
+                                const urlParts = cleanLine.split('/');
+                                const lastPart = urlParts[urlParts.length - 1];
+                                if (lastPart) {
+                                  // Remove query params and decode
+                                  fileName = decodeURIComponent(lastPart.split('?')[0]);
+                                  // Truncate if too long
+                                  if (fileName.length > 25) {
+                                    fileName = fileName.substring(0, 22) + '...';
+                                  }
                                 }
                               }
+                            } catch (e) {
+                              fileName = 'File';
                             }
-                          } catch (e) {
-                            // If parsing fails, just show truncated URL
-                            fileName = line.substring(0, 10) + '...';
                           }
-                        }
 
-                        return (
-                          <div key={i} className="flex items-center gap-2 leading-5 h-5">
-                            <span className="text-right w-6">{i + 1}</span>
-                            {fileName && (
-                              <span className="text-gray-400 text-xs truncate max-w-[120px]" title={line}>
-                                {fileName}
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
+                          return (
+                            <div
+                              key={i}
+                              className="flex items-stretch border-b border-gray-600 hover:bg-gray-600/30 transition-colors"
+                            >
+                              {/* Line number */}
+                              <div className="flex-shrink-0 w-10 px-2 py-1 bg-gray-800 text-gray-500 text-right border-r border-gray-600">
+                                {i + 1}
+                              </div>
+
+                              {/* Filename */}
+                              <div className="flex-shrink-0 w-48 px-3 py-1 text-gray-300 border-r border-gray-600 truncate" title={fileName}>
+                                {fileName || <span className="text-gray-600">empty</span>}
+                              </div>
+
+                              {/* URL (editable) */}
+                              <input
+                                type="text"
+                                value={line}
+                                onChange={(e) => {
+                                  const lines = bulkUrls.split('\n');
+                                  lines[i] = e.target.value;
+                                  setBulkUrls(lines.join('\n'));
+                                }}
+                                className="flex-1 px-3 py-1 bg-transparent text-white focus:outline-none focus:bg-gray-600/30"
+                                placeholder="Paste URL here..."
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                    {/* Textarea */}
-                    <textarea
-                      value={bulkUrls}
-                      onChange={(e) => setBulkUrls(e.target.value)}
-                      className="flex-1 h-[40vh] px-4 py-2 bg-gray-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono resize-none overflow-y-auto leading-5"
-                      placeholder="https://drive.google.com/file/d/... (defaults to image)&#10;video: https://drive.google.com/file/d/... (Drive video)&#10;https://youtube.com/watch?v=..."
-                      style={{ outline: 'none' }}
-                    />
                   </div>
                   <p className="text-xs text-gray-500 mt-2">
                     ✨ Auto-detects YouTube videos. Drive defaults to images. Prefix with <code className="bg-gray-600 px-1 rounded">video:</code> for Drive videos.
