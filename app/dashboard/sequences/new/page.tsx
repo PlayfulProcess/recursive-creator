@@ -677,13 +677,54 @@ function NewSequencePageContent() {
                     Paste URLs (one per line or comma-separated)
                   </label>
                   <div className="relative flex border border-gray-600 rounded-lg overflow-hidden bg-gray-700">
-                    {/* Line numbers */}
-                    <div className="flex-shrink-0 bg-gray-800 px-2 py-2 text-gray-500 text-sm font-mono select-none border-r border-gray-600">
-                      {bulkUrls.split('\n').map((_, i) => (
-                        <div key={i} className="text-right leading-5 h-5">
-                          {i + 1}
-                        </div>
-                      ))}
+                    {/* Line numbers with file names */}
+                    <div className="flex-shrink-0 bg-gray-800 px-2 py-2 text-gray-500 text-sm font-mono select-none border-r border-gray-600 overflow-y-auto max-h-[40vh]">
+                      {bulkUrls.split('\n').map((line, i) => {
+                        // Extract filename from URL
+                        let fileName = '';
+                        if (line.trim()) {
+                          try {
+                            // Remove "video:" prefix if present
+                            const cleanLine = line.replace(/^video:\s*/i, '').trim();
+
+                            // Try to extract filename
+                            if (cleanLine.includes('drive.google.com')) {
+                              // For Drive URLs, just show "Drive file"
+                              fileName = 'Drive';
+                            } else if (cleanLine.includes('youtube.com') || cleanLine.includes('youtu.be')) {
+                              // For YouTube, show video ID or "YouTube"
+                              const videoIdMatch = cleanLine.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+                              fileName = videoIdMatch ? `YT:${videoIdMatch[1].substring(0, 6)}` : 'YouTube';
+                            } else {
+                              // Try to get filename from URL
+                              const urlParts = cleanLine.split('/');
+                              const lastPart = urlParts[urlParts.length - 1];
+                              if (lastPart) {
+                                // Remove query params and decode
+                                fileName = decodeURIComponent(lastPart.split('?')[0]);
+                                // Truncate if too long
+                                if (fileName.length > 15) {
+                                  fileName = fileName.substring(0, 12) + '...';
+                                }
+                              }
+                            }
+                          } catch (e) {
+                            // If parsing fails, just show truncated URL
+                            fileName = line.substring(0, 10) + '...';
+                          }
+                        }
+
+                        return (
+                          <div key={i} className="flex items-center gap-2 leading-5 h-5">
+                            <span className="text-right w-6">{i + 1}</span>
+                            {fileName && (
+                              <span className="text-gray-400 text-xs truncate max-w-[120px]" title={line}>
+                                {fileName}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                     {/* Textarea */}
                     <textarea
@@ -751,10 +792,26 @@ function NewSequencePageContent() {
                           <span className="text-lg">{item.type === 'image' ? '📷' : '🎥'}</span>
                         </div>
 
+                        {/* File Name/Title Preview */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-gray-400 truncate" title={item.type === 'image' ? item.image_url : item.url}>
+                            {item.type === 'image' && item.alt_text
+                              ? item.alt_text
+                              : item.type === 'video' && item.title
+                                ? item.title
+                                : item.type === 'image' && item.image_url
+                                  ? (item.image_url.includes('drive.google.com') ? 'Drive Image' : 'Image')
+                                  : item.type === 'video' && item.video_id
+                                    ? `Video: ${item.video_id.substring(0, 8)}`
+                                    : 'Item'
+                            }
+                          </p>
+                        </div>
+
                         {/* Delete Button */}
                         <button
                           onClick={() => handleDeleteItem(index)}
-                          className="ml-auto px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-xs"
+                          className="flex-shrink-0 px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-xs"
                         >
                           ×
                         </button>
