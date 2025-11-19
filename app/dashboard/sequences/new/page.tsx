@@ -233,7 +233,7 @@ function NewSequencePageContent() {
       return;
     }
 
-    // Keep URLs in the order they appear in the textarea
+    // Keep URLs in the order they appear (Import Folder pre-sorts by filename)
     const lines = bulkUrls.split(/[\n,]+/).filter(line => line.trim());
 
     if (lines.length > MAX_ITEMS) {
@@ -244,7 +244,15 @@ function NewSequencePageContent() {
     const newItems: SequenceItem[] = [];
 
     lines.forEach((line, index) => {
-      const { type, processedUrl } = detectUrlType(line);
+      // Extract URL from "filename - URL" format (from Import Folder)
+      // Handles both "filename - https://..." and "filename - video: https://..."
+      let cleanLine = line;
+      const dashMatch = line.match(/^.+? - (.+)$/);
+      if (dashMatch) {
+        cleanLine = dashMatch[1].trim(); // Extract everything after " - "
+      }
+
+      const { type, processedUrl } = detectUrlType(cleanLine);
 
       if (type === 'video') {
         // Check if it's YouTube or Drive

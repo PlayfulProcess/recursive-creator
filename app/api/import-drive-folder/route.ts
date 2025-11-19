@@ -91,14 +91,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Convert to direct URLs
+    // Convert to direct URLs with filenames
     const urls = mediaFiles.map((file: any) => {
       if (file.mimeType.startsWith('video/')) {
         // Videos need the "video:" prefix for type detection
-        return `video: https://drive.google.com/file/d/${file.id}/view`;
+        return `${file.name} - video: https://drive.google.com/file/d/${file.id}/view`;
       } else {
         // Images use the uc?export=view format
-        return `https://drive.google.com/uc?export=view&id=${file.id}`;
+        return `${file.name} - https://drive.google.com/uc?export=view&id=${file.id}`;
       }
     });
 
