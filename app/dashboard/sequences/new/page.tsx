@@ -838,11 +838,11 @@ function NewSequencePageContent() {
 
             <div className="flex gap-4">
               <button
-                onClick={() => handleSaveDraft(false)}  // Force to draft mode
+                onClick={() => handleSaveDraft()}  // Preserve current publish state
                 disabled={saving || items.length === 0}
-                className="flex-1 px-6 py-3 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {saving ? 'Saving...' : (editingId ? 'Save as Draft' : 'Save Draft')}
+                {saving ? 'Saving...' : (editingId ? 'Save Changes' : 'Save Draft')}
               </button>
 
               <button
@@ -850,7 +850,7 @@ function NewSequencePageContent() {
                 disabled={saving || !title.trim() || items.length === 0}
                 className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {saving ? 'Publishing...' : '🌐 Publish Project'}
+                {saving ? 'Publishing...' : (editingId && isPublished ? 'Update Published' : '🌐 Publish')}
               </button>
 
               {editingId && (
