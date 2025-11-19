@@ -48,6 +48,9 @@ function NewSequencePageContent() {
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
 
+  // License agreement
+  const [licenseAgreed, setLicenseAgreed] = useState(false);
+
   // Load sequence data when editing
   useEffect(() => {
     if (editingId && user) {
@@ -836,6 +839,54 @@ function NewSequencePageContent() {
               </div>
             )}
 
+            {/* License Agreement - Show before publishing */}
+            {!isPublished && (
+              <div className="bg-purple-900/30 border border-purple-700/50 rounded-lg p-6 mb-6">
+                <h3 className="text-lg font-semibold text-white mb-3">
+                  📖 Publishing Your Content
+                </h3>
+                <p className="text-gray-300 text-sm mb-4">
+                  When you publish, all <strong>original content you create</strong>{' '}
+                  (images, text, narration) will be licensed under{' '}
+                  <a
+                    href="https://creativecommons.org/licenses/by-sa/4.0/"
+                    target="_blank"
+                    rel="noopener"
+                    className="text-purple-400 hover:text-purple-300 underline font-semibold"
+                  >
+                    Creative Commons BY-SA 4.0
+                  </a>.
+                </p>
+                <p className="text-gray-300 text-sm mb-4">
+                  If you include links to external content (like YouTube videos),
+                  those remain under their original creators' terms—you're simply
+                  curating a collection.
+                </p>
+
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={licenseAgreed}
+                    onChange={(e) => setLicenseAgreed(e.target.checked)}
+                    className="mt-1 w-5 h-5 text-purple-600 rounded focus:ring-2 focus:ring-purple-500"
+                  />
+                  <span className="text-sm text-gray-300">
+                    I confirm that I own or have permission to use all original content
+                    in this project, and I agree to license it under CC BY-SA 4.0.
+                    I have read the{' '}
+                    <a
+                      href="https://recursive.eco/pages/about.html#terms"
+                      target="_blank"
+                      rel="noopener"
+                      className="text-purple-400 hover:text-purple-300 underline"
+                    >
+                      Terms of Use
+                    </a>.
+                  </span>
+                </label>
+              </div>
+            )}
+
             <div className="flex gap-4">
               <button
                 onClick={() => handleSaveDraft()}  // Preserve current publish state
@@ -847,7 +898,7 @@ function NewSequencePageContent() {
 
               <button
                 onClick={() => handleSaveDraft(true)}  // Force to published mode
-                disabled={saving || !title.trim() || items.length === 0}
+                disabled={saving || !title.trim() || items.length === 0 || !licenseAgreed}
                 className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {saving ? 'Publishing...' : (editingId && isPublished ? 'Update Published' : '🌐 Publish')}
