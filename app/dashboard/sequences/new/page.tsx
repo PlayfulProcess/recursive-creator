@@ -244,15 +244,7 @@ function NewSequencePageContent() {
     const newItems: SequenceItem[] = [];
 
     lines.forEach((line, index) => {
-      // Extract URL from "filename - URL" format (from Import Folder)
-      // Handles both "filename - https://..." and "filename - video: https://..."
-      let cleanLine = line;
-      const dashMatch = line.match(/^.+? - (.+)$/);
-      if (dashMatch) {
-        cleanLine = dashMatch[1].trim(); // Extract everything after " - "
-      }
-
-      const { type, processedUrl } = detectUrlType(cleanLine);
+      const { type, processedUrl } = detectUrlType(line);
 
       if (type === 'video') {
         // Check if it's YouTube or Drive

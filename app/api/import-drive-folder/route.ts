@@ -81,8 +81,13 @@ export async function POST(request: NextRequest) {
       file.mimeType.startsWith('video/')
     );
 
-    // Sort alphabetically by filename
-    mediaFiles.sort((a: any, b: any) => a.name.localeCompare(b.name));
+    // Natural sort by filename (1, 2, 3, 10 instead of 1, 10, 2, 3)
+    mediaFiles.sort((a: any, b: any) => {
+      return a.name.localeCompare(b.name, undefined, {
+        numeric: true,
+        sensitivity: 'base'
+      });
+    });
 
     if (mediaFiles.length === 0) {
       return NextResponse.json(
@@ -91,14 +96,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Convert to direct URLs with filenames
+    // Convert to direct URLs
     const urls = mediaFiles.map((file: any) => {
       if (file.mimeType.startsWith('video/')) {
         // Videos need the "video:" prefix for type detection
-        return `${file.name} - video: https://drive.google.com/file/d/${file.id}/view`;
+        return `video: https://drive.google.com/file/d/${file.id}/view`;
       } else {
         // Images use the uc?export=view format
-        return `${file.name} - https://drive.google.com/uc?export=view&id=${file.id}`;
+        return `https://drive.google.com/uc?export=view&id=${file.id}`;
       }
     });
 
