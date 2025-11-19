@@ -1505,6 +1505,550 @@ This revealed callback was ignoring the `code` parameter completely.
 
 ---
 
+## Phase 8: Community Stories Platform (NEXT)
+
+**Date:** 2025-11-19
+**Status:** Planning
+**Goal:** Transform from individual story creator to community platform
+
+### Vision: Parent Community Storytelling
+
+**The Mission:**
+Create a community where parents collaboratively build a library of children's stories that reflect diverse families, cultures, and experiences. Gateway building, not gatekeating.
+
+**Core Values:**
+- Stories BY parents FOR parents
+- Cultural representation matters
+- Low barrier to entry (if you can use Google Drive, you can create)
+- Collective ownership with clear moderation
+
+---
+
+### Feature Requirements
+
+#### 1. Call-to-Action for Viewers (Conversion Funnel)
+
+**Problem:** People viewing stories don't know they can create their own
+
+**Solution:** Add prominent CTA on viewer page
+
+**Location:** `/view.html` (recursive-landing)
+
+**Design:**
+```html
+<!-- Show ONLY when viewing OTHER people's stories (not your own) -->
+<div class="bg-purple-600 text-white p-4 text-center">
+  <h3 class="font-bold mb-2">✨ Create Your Own Story</h3>
+  <p class="text-sm mb-3">Share stories that reflect your family's experiences</p>
+  <a href="https://creator.recursive.eco/dashboard/sequences/new"
+     class="inline-block px-6 py-2 bg-white text-purple-600 rounded-lg font-semibold hover:bg-gray-100">
+    Start Creating →
+  </a>
+</div>
+```
+
+**Placement Options:**
+- A) Above the story (hero section)
+- B) Below the story (after viewing)
+- C) Fixed banner at bottom (always visible)
+
+**Decision needed:** Which placement feels least intrusive while being visible?
+
+---
+
+#### 2. Submit to Community Stories Channel
+
+**Problem:** After publishing, creators don't know how to share with community
+
+**Solution:** Post-publish flow that submits to recursive-channels
+
+**Architecture:**
+
+**Step 1: After Publishing (recursive-creator)**
+```typescript
+// In handleSaveDraft() when publish=true
+if (publishSuccess && isNewlyPublished) {
+  // Show modal: "Submit to Community Stories?"
+  setShowCommunitySubmitModal(true);
+}
+```
+
+**Step 2: Community Submit Modal**
+```tsx
+<Modal>
+  <h2>🎉 Story Published!</h2>
+  <p>Your story is live at: recursive.eco/view/{id}</p>
+
+  <div className="mt-4">
+    <h3>Share with the Community?</h3>
+    <p>Submit your story to the "Kids Stories" channel where other parents can discover it.</p>
+
+    <label>
+      <input type="checkbox" checked={agreedToTerms} />
+      I agree that:
+      - This story is appropriate for children
+      - I own or have rights to all content
+      - Story is licensed under Creative Commons BY-SA 4.0
+      - Recursive.eco can moderate/remove at any time
+    </label>
+
+    <button onClick={submitToCommunity}>
+      Submit to Community Stories
+    </button>
+    <button onClick={close}>
+      Skip (I'll share privately)
+    </button>
+  </div>
+</Modal>
+```
+
+**Step 3: Backend API Route**
+```typescript
+// POST /api/submit-to-community
+// 1. Verify user owns the story
+// 2. Check story is published (is_public=true)
+// 3. Create entry in recursive-channels database
+// 4. Set status to "pending_approval"
+// 5. Notify moderator (you) via email
+```
+
+**Step 4: Approval Workflow**
+- You review story in recursive-channels admin
+- Approve → story appears in "Kids Stories" channel
+- Deny → story removed, user NOT notified (as per your requirement)
+
+---
+
+#### 3. Content Reporting System (Safety)
+
+**Problem:** Need way for viewers to report inappropriate content
+
+**Solution:** Add "Report" button to viewer
+
+**Location:** `/view.html` (recursive-landing)
+
+**UI:**
+```html
+<!-- Discreet button in viewer controls -->
+<div class="viewer-controls">
+  <button id="prev-btn">← Previous</button>
+  <button id="fullscreen-btn">⛶ Fullscreen</button>
+  <button id="next-btn">Next →</button>
+
+  <!-- NEW: Report button (subtle, not prominent) -->
+  <button id="report-btn" class="text-red-600 text-sm ml-4">
+    ⚠ Report
+  </button>
+</div>
+```
+
+**Report Flow:**
+```javascript
+// Click Report → Modal opens
+function showReportModal() {
+  const modal = `
+    <h3>Report Inappropriate Content</h3>
+    <p>What's wrong with this story?</p>
+    <label>
+      <input type="radio" name="reason" value="explicit">
+      Explicit/sexual content
+    </label>
+    <label>
+      <input type="radio" name="reason" value="violence">
+      Graphic violence
+    </label>
+    <label>
+      <input type="radio" name="reason" value="hate">
+      Hate speech/discrimination
+    </label>
+    <label>
+      <input type="radio" name="reason" value="other">
+      Other (describe below)
+    </label>
+    <textarea placeholder="Additional details (optional)"></textarea>
+
+    <button onclick="submitReport()">Submit Report</button>
+  `;
+}
+
+async function submitReport() {
+  // POST /api/report-content
+  // - content_id (story UUID)
+  // - reason (explicit/violence/hate/other)
+  // - details (optional text)
+  // - reporter_ip (for abuse prevention, NOT stored permanently)
+  //
+  // Email YOU immediately with report details
+  // Show "Thank you" message to reporter
+  // Do NOT notify story creator (privacy)
+}
+```
+
+**Moderation Dashboard:**
+- New section in recursive-channels admin
+- Shows all reports
+- Can view reported story
+- Actions: Remove story, dismiss report, ban creator
+
+---
+
+#### 4. Licensing & Legal Framework
+
+**Current Requirement:** "Creative Commons with recursive.eco as sole owner"
+
+**⚠️ IMPORTANT LEGAL ISSUE:**
+
+This creates a **contradiction**:
+- Creative Commons = Community ownership, remixing allowed
+- "Sole owner" = Exclusive ownership, no remixing
+
+**Recommendation:** Use **Creative Commons BY-SA 4.0** WITHOUT "sole owner" clause
+
+**Why:**
+- Aligns with your "gateway building" mission
+- Allows parents to remix each other's stories
+- Protects you legally (attribution required, share-alike enforced)
+- Standard for community platforms (Wikipedia, Khan Academy use this)
+
+**Proposed License:**
+
+```
+All stories submitted to Recursive.eco are licensed under:
+Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+
+This means:
+✅ Anyone can use, remix, and build upon stories
+✅ Must give credit to original creator
+✅ Must license remixes under same terms (share-alike)
+✅ Commercial use allowed (aligns with Free Software values)
+
+Recursive.eco rights:
+✅ Host and display all community stories
+✅ Moderate content (remove inappropriate stories)
+✅ Aggregate stories into collections/channels
+❌ We do NOT claim ownership of your stories
+✅ You retain copyright, we have a perpetual license to host
+
+Moderation policy:
+- Stories may be removed at any time without explanation
+- Removal reasons: inappropriate content, copyright violations, community safety
+- No appeals process (you are the sole moderator)
+```
+
+**Alternative if you MUST have ownership:**
+
+Use **CC0 (Public Domain)** instead:
+- Creators waive ALL rights
+- Stories become public domain
+- You (and everyone) can do anything with them
+- More legally clear than "CC + sole owner"
+
+**My Recommendation:** CC BY-SA 4.0 is better for community trust
+
+---
+
+#### 5. Terms of Service Updates
+
+**New sections needed:**
+
+**5.1 User-Generated Content**
+```
+When you publish a story on Recursive.eco:
+
+1. You represent that you own or have rights to all content (text, images, videos)
+2. You grant Recursive.eco a perpetual, worldwide, non-exclusive license to host and display your content
+3. You agree to license your story under CC BY-SA 4.0 to the community
+4. You acknowledge that stories may be submitted to community channels for discovery
+5. You understand that stories are public and may be indexed by search engines
+```
+
+**5.2 Content Moderation**
+```
+Recursive.eco reserves the right to:
+
+1. Review all stories before appearing in community channels
+2. Remove any story at any time without notice or explanation
+3. Disable accounts that violate community standards
+4. No appeals process - moderation decisions are final
+
+Community standards:
+- Content must be appropriate for children
+- No explicit sexual content, graphic violence, hate speech
+- No copyrighted material without permission
+- No spam, advertising, or commercial promotion
+```
+
+**5.3 Liability & Indemnification**
+```
+Recursive.eco is a platform for community storytelling:
+
+1. We do not guarantee accuracy, safety, or appropriateness of community content
+2. Parents/guardians are responsible for supervising children's content consumption
+3. We are not liable for user-generated content
+4. You indemnify us against claims arising from your submitted content
+5. Use at your own risk - community moderation is best-effort, not guaranteed
+```
+
+**5.4 COPPA Compliance** (already addressed, but clarify)
+```
+Recursive.eco does not collect personal information from children:
+
+1. Platform is designed for parents/creators (13+)
+2. Viewing stories does not require account creation
+3. No tracking cookies on viewer pages
+4. If you are under 13, you may view stories but not create an account
+```
+
+**5.5 DMCA & Copyright**
+```
+If you believe content infringes your copyright:
+
+1. Email: [dmca@recursive.eco]
+2. Include: URL, description of copyrighted work, contact info
+3. We will investigate and remove infringing content
+4. Repeat infringers will be banned
+```
+
+---
+
+### Implementation Plan (Phased Approach)
+
+#### Phase 8.1: Foundation (Week 1)
+
+**Tasks:**
+- [ ] Add Terms of Service page (`/terms`) with new sections
+- [ ] Add Privacy Policy page (`/privacy`) - already exists?
+- [ ] Create CC BY-SA 4.0 license page (`/license`)
+- [ ] Add license acknowledgment checkbox to story creator
+- [ ] Update footer links to include Terms, Privacy, License
+
+**Files:**
+- `recursive-landing/terms.html` (new)
+- `recursive-landing/privacy.html` (update?)
+- `recursive-landing/license.html` (new)
+- `recursive-creator/app/dashboard/sequences/new/page.tsx` (add checkbox)
+
+#### Phase 8.2: Call-to-Action (Week 1)
+
+**Tasks:**
+- [ ] Add "Create Your Own Story" banner to `/view.html`
+- [ ] Detect if viewer is viewing their own story (hide CTA)
+- [ ] Track clicks (simple counter, no personal data)
+- [ ] A/B test placement (above vs below story)
+
+**Files:**
+- `recursive-landing/view.html` (add CTA banner)
+
+#### Phase 8.3: Community Submission Flow (Week 2)
+
+**Tasks:**
+- [ ] Create post-publish modal in recursive-creator
+- [ ] Build `/api/submit-to-community` endpoint
+- [ ] Integrate with recursive-channels database
+- [ ] Send email notification to you on new submissions
+- [ ] Create pending stories queue in channels admin
+
+**Files:**
+- `recursive-creator/app/dashboard/sequences/new/page.tsx` (modal)
+- `recursive-creator/app/api/submit-to-community/route.ts` (new)
+- Supabase: Add `community_submissions` table or use existing channels
+
+**Database Schema:**
+```sql
+-- Option 1: New table (cleaner)
+CREATE TABLE community_story_submissions (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  story_id uuid REFERENCES user_documents(id),
+  creator_id uuid REFERENCES profiles(id),
+  status text DEFAULT 'pending', -- pending, approved, denied
+  submitted_at timestamptz DEFAULT now(),
+  reviewed_at timestamptz,
+  reviewed_by text
+);
+
+-- Option 2: Use existing channels table
+-- Add story submissions as channel posts with special flag
+```
+
+#### Phase 8.4: Content Reporting (Week 2)
+
+**Tasks:**
+- [ ] Add Report button to viewer
+- [ ] Create report modal UI
+- [ ] Build `/api/report-content` endpoint
+- [ ] Email you on new reports (high priority)
+- [ ] Create reports dashboard in channels admin
+
+**Files:**
+- `recursive-landing/view.html` (add report button)
+- Backend API for report handling
+
+#### Phase 8.5: Moderation Tools (Week 3)
+
+**Tasks:**
+- [ ] Build admin dashboard for reviewing submissions
+- [ ] Add approve/deny actions
+- [ ] Build reports review interface
+- [ ] Add ban/unban user functionality
+- [ ] Create moderation log for tracking decisions
+
+**Files:**
+- `recursive-channels-fresh/app/admin/stories/page.tsx` (new)
+- `recursive-channels-fresh/app/admin/reports/page.tsx` (new)
+
+---
+
+### Open Questions & Decisions Needed
+
+**1. Licensing:**
+- ✅ **My recommendation:** CC BY-SA 4.0 (community-friendly, legally sound)
+- ⚠️ Alternative: CC0 Public Domain (if you want zero ownership claims)
+- ❌ Not recommended: "CC + sole owner" (legally contradictory)
+
+**Your decision:** Which license should we use?
+
+**2. CTA Placement:**
+- A) Above story (high visibility, might be intrusive)
+- B) Below story (after viewing, might be missed)
+- C) Fixed banner at bottom (always visible, might annoy)
+
+**Your decision:** Which placement?
+
+**3. Moderation Transparency:**
+- Your requirement: "Deny without explanation"
+- Tradeoff: Less transparency, but faster moderation
+- Alternative: Generic reasons ("didn't meet community standards")
+
+**Your decision:** Stick with no-explanation policy?
+
+**4. Community Channel:**
+- Option A: Dedicated "Kids Stories" channel in recursive-channels
+- Option B: Multiple channels (by age, theme, culture)
+- Option C: Tag-based system (creators tag their own stories)
+
+**Your decision:** How should stories be organized in channels?
+
+**5. Creator Attribution:**
+- Show real names? (encourages quality, but privacy concern)
+- Show usernames? (more anonymous, but less personal)
+- Show "By: [Name/Username]" on viewer?
+
+**Your decision:** How should creators be credited?
+
+---
+
+### Risk Assessment
+
+**High Risk:**
+- **Legal liability** for user content (mitigated by ToS, DMCA process)
+- **Child safety** if inappropriate content gets through (mitigated by reporting + moderation)
+- **Copyright infringement** if creators upload copyrighted images (mitigated by license checkbox + DMCA)
+
+**Medium Risk:**
+- **Spam/abuse** of submission system (mitigated by account requirement + rate limiting)
+- **Moderation burnout** as community grows (need clear boundaries from start)
+
+**Low Risk:**
+- **Server costs** for hosting images (you're using Google Drive, so minimal)
+
+**Mitigation Strategies:**
+1. Clear ToS that limits your liability
+2. Robust reporting system
+3. Conservative moderation (when in doubt, deny)
+4. Email notifications for all reports (immediate action)
+5. Ban repeat offenders quickly
+
+---
+
+### Success Metrics (How to know it's working)
+
+**Month 1:**
+- 10+ stories submitted to community
+- 50+ unique viewers of community stories
+- Zero safety incidents (reports handled < 24hrs)
+
+**Month 3:**
+- 50+ stories in community library
+- 500+ unique viewers
+- 5+ active creator accounts (multiple stories each)
+
+**Month 6:**
+- 100+ stories
+- 2000+ unique viewers
+- Organic growth (parents telling other parents)
+- First remix/adaptation of existing story
+
+**Long-term Vision:**
+- Self-sustaining community
+- Cultural diversity in story library
+- Parents teaching each other to create
+- Integration with schools/libraries
+
+---
+
+### Technical Architecture Summary
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    COMMUNITY PLATFORM                        │
+└─────────────────────────────────────────────────────────────┘
+
+┌──────────────────┐        ┌──────────────────┐
+│  Viewer (Public) │        │ Creator (Auth)   │
+│  recursive.eco   │        │ creator.r.eco    │
+└──────────────────┘        └──────────────────┘
+         │                           │
+         │ 1. Views story            │ 2. Publishes story
+         │ 2. Sees CTA               │ 3. Submits to community
+         │ 3. Can report             │
+         │                           │
+         └───────────┬───────────────┘
+                     │
+         ┌───────────▼────────────┐
+         │   Supabase Database    │
+         │                        │
+         │ - user_documents       │ (stories)
+         │ - community_submissions│ (pending queue)
+         │ - content_reports      │ (safety)
+         │ - channels             │ (approved stories)
+         └────────────────────────┘
+                     │
+         ┌───────────▼────────────┐
+         │   Admin Dashboard      │
+         │   channels.r.eco       │
+         │                        │
+         │ - Review submissions   │
+         │ - Handle reports       │
+         │ - Moderate content     │
+         │ - Ban users            │
+         └────────────────────────┘
+```
+
+---
+
+### Next Steps
+
+1. **Review this plan** and make decisions on open questions
+2. **Update Terms of Service** (highest priority - legal protection)
+3. **Choose license** (CC BY-SA 4.0 recommended)
+4. **Start with Phase 8.1** (foundation + legal pages)
+5. **Iterate based on community feedback**
+
+---
+
+**Your Turn:**
+
+Please review and decide:
+- [ ] License choice (CC BY-SA 4.0 vs CC0 vs other)
+- [ ] CTA placement (above/below/fixed banner)
+- [ ] Channel organization (single channel vs multiple)
+- [ ] Creator attribution (names vs usernames)
+- [ ] Any changes to the plan
+
+Once decided, we can start implementation!
+
+---
+
 **END OF CONTEXT FILE**
 
 *This file will be updated as we progress. Always read this first when resuming!*
