@@ -622,48 +622,12 @@ function NewSequencePageContent() {
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     Paste URLs (one per line or comma-separated)
                   </label>
-                  <div className="border border-gray-600 rounded-lg bg-gray-700 p-2">
-                    {/* Scrollable numbered list */}
-                    <div className="h-[40vh] overflow-y-auto space-y-2">
-                      {bulkUrls.split('\n').filter(line => line.trim()).map((line, i) => (
-                        <div key={i} className="flex items-center gap-2">
-                          {/* Line number */}
-                          <div className="flex-shrink-0 w-8 text-right text-gray-500 font-mono text-sm">
-                            {i + 1}
-                          </div>
-
-                          {/* URL input */}
-                          <input
-                            type="text"
-                            value={line}
-                            onChange={(e) => {
-                              const allLines = bulkUrls.split('\n');
-                              const nonEmptyLines = allLines.filter(l => l.trim());
-                              nonEmptyLines[i] = e.target.value;
-                              const cleanedLines = nonEmptyLines.filter(l => l.trim());
-                              setBulkUrls(cleanedLines.join('\n'));
-                            }}
-                            className="flex-1 px-3 py-2 bg-gray-600 border border-gray-500 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            placeholder="Paste URL here..."
-                          />
-
-                          {/* Delete button */}
-                          <button
-                            onClick={() => {
-                              const allLines = bulkUrls.split('\n');
-                              const nonEmptyLines = allLines.filter(l => l.trim());
-                              nonEmptyLines.splice(i, 1);
-                              setBulkUrls(nonEmptyLines.join('\n'));
-                            }}
-                            className="flex-shrink-0 w-8 h-8 bg-red-600 text-white rounded hover:bg-red-700 transition-colors flex items-center justify-center"
-                            title="Delete this line"
-                          >
-                            ×
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                  <textarea
+                    value={bulkUrls}
+                    onChange={(e) => setBulkUrls(e.target.value)}
+                    placeholder="Paste URLs here... (one per line or comma-separated)&#10;&#10;Examples:&#10;https://drive.google.com/file/d/abc123/view&#10;https://youtube.com/watch?v=abc123&#10;video: https://drive.google.com/file/d/abc123/view"
+                    className="w-full h-[40vh] px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  />
                   <p className="text-xs text-gray-500 mt-2">
                     ✨ Auto-detects YouTube videos. Drive defaults to images. Prefix with <code className="bg-gray-600 px-1 rounded">video:</code> for Drive videos.
                   </p>
@@ -854,7 +818,7 @@ function NewSequencePageContent() {
             <div className="flex gap-4">
               <button
                 onClick={() => handleSaveDraft(false)}  // Force to draft mode
-                disabled={saving || !title.trim() || items.length === 0}
+                disabled={saving || items.length === 0}
                 className="flex-1 px-6 py-3 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {saving ? 'Saving...' : (editingId ? 'Save as Draft' : 'Save Draft')}
@@ -871,7 +835,7 @@ function NewSequencePageContent() {
               {editingId && (
                 <button
                   onClick={handleSaveAsNew}
-                  disabled={saving || !title.trim() || items.length === 0}
+                  disabled={saving || items.length === 0}
                   className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Save As New
