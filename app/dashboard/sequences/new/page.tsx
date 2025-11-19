@@ -680,7 +680,7 @@ function NewSequencePageContent() {
                     {/* Table-like layout: Line# | Filename | URL */}
                     <div className="h-[40vh] overflow-y-auto">
                       <div className="flex flex-col font-mono text-sm">
-                        {bulkUrls.split('\n').map((line, i) => {
+                        {bulkUrls.split('\n').filter(line => line.trim()).map((line, i) => {
                           // Extract filename from URL
                           let fileName = '';
                           if (line.trim()) {
@@ -735,13 +735,30 @@ function NewSequencePageContent() {
                                 type="text"
                                 value={line}
                                 onChange={(e) => {
-                                  const lines = bulkUrls.split('\n');
-                                  lines[i] = e.target.value;
-                                  setBulkUrls(lines.join('\n'));
+                                  const allLines = bulkUrls.split('\n');
+                                  const nonEmptyLines = allLines.filter(l => l.trim());
+                                  nonEmptyLines[i] = e.target.value;
+                                  // Filter out empty values and rejoin
+                                  const cleanedLines = nonEmptyLines.filter(l => l.trim());
+                                  setBulkUrls(cleanedLines.join('\n'));
                                 }}
                                 className="flex-1 px-3 py-1 bg-transparent text-white focus:outline-none focus:bg-gray-600/30"
                                 placeholder="Paste URL here..."
                               />
+
+                              {/* Delete button */}
+                              <button
+                                onClick={() => {
+                                  const allLines = bulkUrls.split('\n');
+                                  const nonEmptyLines = allLines.filter(l => l.trim());
+                                  nonEmptyLines.splice(i, 1);
+                                  setBulkUrls(nonEmptyLines.join('\n'));
+                                }}
+                                className="flex-shrink-0 px-3 py-1 bg-red-600 text-white hover:bg-red-700 transition-colors"
+                                title="Delete this row"
+                              >
+                                ×
+                              </button>
                             </div>
                           );
                         })}
