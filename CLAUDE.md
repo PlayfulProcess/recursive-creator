@@ -1505,118 +1505,712 @@ This revealed callback was ignoring the `code` parameter completely.
 
 ---
 
-## Phase 8: Community Stories Platform (NEXT)
+## Phase 8: Publishing Workflow & Licensing (NEXT)
 
 **Date:** 2025-11-19
 **Status:** Planning
-**Goal:** Transform from individual story creator to community platform
+**Goal:** Implement clear publishing workflow with licensing, terms, and channel submission
 
-### Vision: Parent Community Storytelling
-
-**The Mission:**
-Create a community where parents collaboratively build a library of children's stories that reflect diverse families, cultures, and experiences. Gateway building, not gatekeating.
-
-**Core Values:**
-- Stories BY parents FOR parents
-- Cultural representation matters
-- Low barrier to entry (if you can use Google Drive, you can create)
-- Collective ownership with clear moderation
+**Dev Branch Name:** `feature/publishing-workflow-20251119` (across all repos)
 
 ---
 
-### Feature Requirements
+### Overview: Gateway Building with Clear Legal Framework
 
-#### 1. Call-to-Action for Viewers (Conversion Funnel)
+Before opening to community, we need:
+1. ✅ Clear licensing for user-generated content
+2. ✅ Terms of use that protect the platform
+3. ✅ Smooth workflow from create → publish → share to channels
+4. ✅ "Recursive.eco links only" policy for channels (quality control + legal clarity)
 
-**Problem:** People viewing stories don't know they can create their own
+---
 
-**Solution:** Add prominent CTA on viewer page
+### Phase 8.1: Legal Foundation & Terms (Week 1)
 
-**Location:** `/view.html` (recursive-landing)
+#### **A) Update About Page Terms** (`recursive-landing/pages/about.html`)
 
-**Design:**
+**Location:** Add new subsection at line ~520 (after "Your Content & Responsibilities")
+
+**Content:**
 ```html
-<!-- Show ONLY when viewing OTHER people's stories (not your own) -->
-<div class="bg-purple-600 text-white p-4 text-center">
-  <h3 class="font-bold mb-2">✨ Create Your Own Story</h3>
-  <p class="text-sm mb-3">Share stories that reflect your family's experiences</p>
-  <a href="https://creator.recursive.eco/dashboard/sequences/new"
-     class="inline-block px-6 py-2 bg-white text-purple-600 rounded-lg font-semibold hover:bg-gray-100">
-    Start Creating →
-  </a>
+<!-- User-Generated Content & Licensing -->
+<div class="bg-blue-50 border-l-4 border-blue-400 p-6 mb-6">
+    <h3 class="text-xl font-bold text-gray-900 mb-3 flex items-center">
+        <span class="mr-2">📖</span>
+        Content You Create & Publish
+    </h3>
+    <p class="text-gray-800 mb-3 leading-relaxed">
+        When you publish content on Recursive.eco (stories, curated playlists, or mixed sequences),
+        all <strong>original content you create</strong>—images, text, narration—is automatically
+        licensed under
+        <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener"
+           class="text-blue-600 hover:text-blue-800 underline font-semibold">
+            Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+        </a>.
+    </p>
+    <p class="text-gray-800 mb-3 leading-relaxed">
+        <strong>What this means:</strong>
+    </p>
+    <ul class="list-disc list-inside text-gray-800 space-y-1 mb-3">
+        <li>✅ Anyone can view, share, and adapt your original content</li>
+        <li>✅ They must give you credit (attribution)</li>
+        <li>✅ Adaptations must use the same license (share-alike)</li>
+        <li>✅ Commercial use is allowed (aligns with Free Software values)</li>
+    </ul>
+    <p class="text-gray-800 mb-3 leading-relaxed">
+        <strong>External content (YouTube videos, etc.):</strong> If you include links to external
+        content, those remain under their original creators' terms. You're curating a collection,
+        not licensing content you don't own.
+    </p>
+    <p class="text-gray-800 mb-3 leading-relaxed">
+        <strong>Your rights:</strong> You retain copyright to your original work. The CC BY-SA 4.0
+        license is a <em>non-exclusive</em> license—you can still use your content elsewhere,
+        sell it, or license it differently. You simply can't revoke the public's right to use
+        what you've already shared under CC BY-SA 4.0.
+    </p>
+    <p class="text-gray-800 leading-relaxed">
+        <strong>Important:</strong> You represent that you own or have permission to use all content
+        you publish. Do not upload copyrighted material without permission. We reserve the right to
+        remove content that violates copyright or community standards.
+    </p>
 </div>
 ```
 
-**Placement Options:**
-- A) Above the story (hero section)
-- B) Below the story (after viewing)
-- C) Fixed banner at bottom (always visible)
-
-**Decision needed:** Which placement feels least intrusive while being visible?
+**Why this approach:**
+- ✅ Generic message works for stories, playlists, AND mixed sequences
+- ✅ External link to official CC license (no need to copy full legal text)
+- ✅ Clear: "Your stuff = CC BY-SA, External links = not yours"
+- ✅ Lives in existing legal section where users expect it
 
 ---
 
-#### 2. Submit to Community Stories Channel
+#### **B) Add License Checkbox at Publish Time** (`recursive-creator/app/dashboard/sequences/new/page.tsx`)
 
-**Problem:** After publishing, creators don't know how to share with community
+**Location:** Before "Save & Publish" button (around line 400-500)
 
-**Solution:** ✅ **SIMPLIFIED:** Pre-fill channels submission form (no complex API!)
-
-**Architecture:**
-
-**Step 1: After Publishing (recursive-creator)**
-Show success message with "Submit to Community" button that links to channels with pre-filled form data
-
-**Step 2: Success Modal with Pre-filled Link**
+**Implementation:**
 ```tsx
-// In handleSaveDraft() after successful publish
-if (publishSuccess && publishedUrl) {
-  // Build pre-filled channels URL
-  const channelSubmitUrl = new URL('https://channels.recursive.eco/submit');
-  channelSubmitUrl.searchParams.set('link', publishedUrl); // recursive.eco/view/{id}
-  channelSubmitUrl.searchParams.set('title', title);
-  channelSubmitUrl.searchParams.set('description', description || '');
-  channelSubmitUrl.searchParams.set('channel', 'kids-stories');
+{/* License Agreement - Show before publishing */}
+{!isPublished && (
+  <div className="bg-purple-50 border border-purple-200 rounded-lg p-6 mb-6">
+    <h3 className="text-lg font-semibold text-gray-900 mb-3">
+      📖 Publishing Your Content
+    </h3>
+    <p className="text-gray-700 text-sm mb-4">
+      When you publish, all <strong>original content you create</strong>
+      (images, text, narration) will be licensed under{' '}
+      <a
+        href="https://creativecommons.org/licenses/by-sa/4.0/"
+        target="_blank"
+        rel="noopener"
+        className="text-purple-600 hover:text-purple-700 underline font-semibold"
+      >
+        Creative Commons BY-SA 4.0
+      </a>.
+    </p>
+    <p className="text-gray-700 text-sm mb-4">
+      If you include links to external content (like YouTube videos),
+      those remain under their original creators' terms—you're simply
+      curating a collection.
+    </p>
 
-  // Show in success message
-  <div>
-    <h2>🎉 Story Published!</h2>
-    <p>Your story is live at: {publishedUrl}</p>
+    <label className="flex items-start gap-3 cursor-pointer">
+      <input
+        type="checkbox"
+        checked={licenseAgreed}
+        onChange={(e) => setLicenseAgreed(e.target.checked)}
+        className="mt-1 w-5 h-5 text-purple-600 rounded focus:ring-2 focus:ring-purple-500"
+      />
+      <span className="text-sm text-gray-800">
+        I confirm that I own or have permission to use all original content
+        in this project, and I agree to license it under CC BY-SA 4.0.
+        I have read the{' '}
+        <a
+          href="https://recursive.eco/pages/about.html#terms"
+          target="_blank"
+          rel="noopener"
+          className="text-purple-600 hover:text-purple-700 underline"
+        >
+          Terms of Use
+        </a>.
+      </span>
+    </label>
+  </div>
+)}
 
-    <a href={channelSubmitUrl.toString()}
-       target="_blank"
-       className="btn-primary">
-      📢 Submit to Community Stories
-    </a>
+{/* Update publish button to require license agreement */}
+<button
+  onClick={handleSaveDraft}
+  disabled={saving || !title || items.length === 0 || !licenseAgreed}
+  className="..."
+>
+  {isPublished ? 'Update Published Content' : 'Save & Publish'}
+</button>
+```
 
-    <p className="text-xs text-gray-400">
-      Opens in channels.recursive.eco with pre-filled form.
-      You can review before submitting.
+**Key Features:**
+- ✅ Same message for ALL content types (stories, playlists, mixed)
+- ✅ Checkbox required to publish (enforced via disabled button)
+- ✅ Link to Terms of Use for full details
+- ✅ External link to CC BY-SA 4.0 license
+
+**State to add:**
+```tsx
+const [licenseAgreed, setLicenseAgreed] = useState(false);
+```
+
+---
+
+### Phase 8.2: Submit to Community Button (Week 1) 🔄 CURRENT
+
+**Goal:** Test the publish → submit → channels workflow BEFORE adding link restrictions
+
+**Strategy:** Pre-fill channels submission form from creator success modal
+
+**Why This Order:**
+- ✅ Test happy path first (make sure workflow works)
+- ✅ Then add restrictions (link validation)
+- ✅ Avoid debugging workflow issues while also dealing with validation errors
+
+---
+
+#### **Implementation: Pre-filled Submission Flow**
+
+**File:** `recursive-creator/app/dashboard/sequences/new/page.tsx`
+
+Add after successful publish:
+
+```tsx
+{/* Success message with channel submission */}
+{success && isPublished && publishedUrl && (
+  <div className="bg-green-50 border border-green-200 rounded-lg p-6 mb-6">
+    <h3 className="text-xl font-bold text-gray-900 mb-3">
+      🎉 Published Successfully!
+    </h3>
+    <p className="text-gray-700 mb-4">
+      Your content is now live at:{' '}
+      <a
+        href={publishedUrl}
+        target="_blank"
+        rel="noopener"
+        className="text-purple-600 hover:text-purple-700 underline font-semibold"
+      >
+        {publishedUrl}
+      </a>
+    </p>
+
+    {/* Submit to Community Channel button */}
+    <div className="bg-white border border-purple-200 rounded-lg p-4">
+      <h4 className="font-semibold text-gray-900 mb-2">
+        📢 Share with the Community
+      </h4>
+      <p className="text-sm text-gray-700 mb-3">
+        Submit your content to the Kids Stories channel so other families can discover it!
+      </p>
+      <p className="text-xs text-gray-600 mb-3 italic">
+        💡 You can also share links from trusted sources like Goodreads (book recommendations),
+        Claude/ChatGPT (AI tools), Amazon (products), or Google Drive (shared files).
+      </p>
+      <a
+        href={buildChannelSubmitUrl(publishedUrl, title, description)}
+        target="_blank"
+        rel="noopener"
+        className="inline-block px-6 py-2 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700"
+      >
+        Submit to Community Stories →
+      </a>
+      <p className="text-xs text-gray-500 mt-2">
+        Opens in channels.recursive.eco with your content pre-filled.
+        You can review before submitting.
+      </p>
+    </div>
+  </div>
+)}
+
+// Helper function
+const buildChannelSubmitUrl = (link: string, title: string, desc: string) => {
+  const url = new URL('https://channels.recursive.eco/submit');
+  url.searchParams.set('link', link);
+  url.searchParams.set('title', title);
+  url.searchParams.set('description', desc || '');
+  url.searchParams.set('channel', 'kids-stories');
+  return url.toString();
+};
+```
+
+---
+
+### Phase 8.3: Link Validation for Channels (Week 2) - AFTER 8.2 Works
+
+**Goal:** Add link validation to channels, but allow multiple trusted domains (not just recursive.eco)
+
+**Strategy:** Test workflow first (8.2), then add smart validation that supports content curation
+
+**Allowed Domains:**
+- `recursive.eco` (all subdomains) - Own content
+- `goodreads.com` - Book recommendations
+- `claude.ai` - AI tools/resources
+- `chatgpt.com` / `openai.com` - AI tools/resources
+- `amazon.com` - Product recommendations
+- `drive.google.com` - Shared documents, images, files
+
+**Rationale:**
+- Support content curation from trusted platforms
+- Still maintain quality control (no random spam sites)
+- Flexible enough for different content types
+- Google Drive allows sharing resources without self-hosting
+
+---
+
+#### **Implementation: Multi-Domain Validation**
+
+**File:** `recursive-channels-fresh/app/submit/page.tsx` (or wherever submit form lives)
+
+```tsx
+// Allowed domains for channel submissions
+const ALLOWED_DOMAINS = [
+  'recursive.eco',
+  'goodreads.com',
+  'claude.ai',
+  'chatgpt.com',
+  'openai.com',
+  'amazon.com',
+  'drive.google.com'
+];
+
+// Validate that submitted link is from allowed domain
+const isValidLink = (url: string): boolean => {
+  try {
+    const parsedUrl = new URL(url);
+    const hostname = parsedUrl.hostname;
+
+    // Check if hostname matches any allowed domain (including subdomains)
+    return ALLOWED_DOMAINS.some(domain =>
+      hostname === domain || hostname.endsWith(`.${domain}`)
+    );
+  } catch {
+    return false;
+  }
+};
+
+// Show helpful error if link not allowed
+{linkUrl && !isValidLink(linkUrl) && (
+  <div className="bg-red-50 border border-red-200 rounded p-4 mb-4">
+    <p className="text-sm text-red-800 mb-2">
+      <strong>Link not from allowed domain.</strong>
+    </p>
+    <p className="text-sm text-gray-700 mb-2">
+      For quality control, we only accept links from these trusted sources:
+    </p>
+    <ul className="text-xs text-gray-600 list-disc list-inside space-y-1">
+      <li><strong>recursive.eco</strong> - Your own published content</li>
+      <li><strong>goodreads.com</strong> - Book recommendations</li>
+      <li><strong>claude.ai, chatgpt.com</strong> - AI tools & resources</li>
+      <li><strong>amazon.com</strong> - Product recommendations</li>
+      <li><strong>drive.google.com</strong> - Shared documents & files</li>
+    </ul>
+    <p className="text-sm text-gray-700 mt-2">
+      To share your own content, publish it at{' '}
+      <a href="https://creator.recursive.eco" className="text-blue-600 underline">
+        creator.recursive.eco
+      </a>{' '}
+      first, then submit the recursive.eco/view/... link here.
     </p>
   </div>
+)}
+
+// Also disable submit button if link invalid
+<button
+  onClick={handleSubmit}
+  disabled={submitting || !linkUrl || !isValidLink(linkUrl)}
+  className="..."
+>
+  Submit to Channel
+</button>
+```
+
+---
+
+### Phase 8.4: Call-to-Action Banner (Later)
+
+**Location:** `recursive-landing/view.html` (or wherever the viewer lives)
+
+**Implementation:**
+```html
+<!-- CTA Banner - Show above content (hero section) -->
+<div class="bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-6 text-center mb-8 rounded-lg">
+  <h3 class="text-xl font-bold mb-2">✨ Create Your Own Story</h3>
+  <p class="text-sm mb-4 opacity-90">
+    Share stories that reflect your family's experiences and culture
+  </p>
+  <a
+    href="https://creator.recursive.eco/dashboard/sequences/new"
+    class="inline-block px-8 py-3 bg-white text-purple-600 rounded-lg font-semibold hover:bg-gray-100 transition-colors"
+  >
+    Start Creating →
+  </a>
+</div>
+
+<!-- Optional: Hide CTA if viewing own content -->
+<script>
+  // Check if viewer is the creator (via URL param or session)
+  const urlParams = new URLSearchParams(window.location.search);
+  const isOwnContent = urlParams.get('preview') === 'true'; // or other logic
+
+  if (isOwnContent) {
+    document.querySelector('.cta-banner')?.remove();
+  }
+</script>
+```
+
+---
+
+### Phase 8.5: Dev Branch Strategy (Cross-Repo Coordination)
+
+**Branch Name:** `feature/publishing-workflow-20251119`
+
+**Affected Repositories:**
+1. **recursive-landing** - About page terms update
+2. **recursive-creator** - License checkbox + channel submission button
+3. **recursive-channels-fresh** - Submit form validation (recursive.eco links only)
+
+**Workflow:**
+
+```bash
+# Step 1: Create branches in all repos
+cd recursive-landing
+git checkout -b feature/publishing-workflow-20251119
+
+cd ../recursive-creator
+git checkout -b feature/publishing-workflow-20251119
+
+cd ../recursive-channels-fresh
+git checkout -b feature/publishing-workflow-20251119
+
+# Step 2: Make changes in parallel
+# - Landing: Update about.html (add licensing section)
+# - Creator: Add license checkbox + success modal with channel submit button
+# - Channels: Add link validation (recursive.eco only)
+
+# Step 3: Test locally with all 3 running
+npm run dev # In each repo on different ports
+
+# Step 4: Commit and push
+git add .
+git commit -m "feat: implement publishing workflow with licensing and channel submission"
+git push origin feature/publishing-workflow-20251119
+
+# Step 5: Deploy to dev/staging for testing
+
+# Step 6: Merge to main after testing
+git checkout main
+git merge feature/publishing-workflow-20251119
+git push origin main
+```
+
+**Testing Checklist:**
+- [ ] About page shows new licensing section with CC BY-SA 4.0 link
+- [ ] Creator dashboard requires license checkbox to publish
+- [ ] Success modal appears after publishing with channel submit button
+- [ ] Channel submit button opens channels.recursive.eco with pre-filled form
+- [ ] Channels form accepts pre-filled query params
+- [ ] Channels form rejects non-recursive.eco links
+- [ ] Full workflow: create → publish → submit → approve works end-to-end
+
+---
+
+### Implementation Priority (REVISED 2025-11-19)
+
+**Phase 8.1: Legal Foundation** ✅ COMPLETE
+1. ✅ Update about.html with licensing section
+2. ✅ Add license checkbox to creator dashboard
+
+**Phase 8.2: Submit to Community Button** 🔄 NEXT (Test workflow FIRST)
+3. ⏳ Add "Submit to Community" success modal in creator
+4. ⏳ Verify channels submit form accepts query params
+5. ⏳ Test full workflow: publish → submit → appears in channels
+   - **Goal:** Ensure basic workflow works before adding restrictions
+
+**Phase 8.3: Link Validation** (AFTER 8.2 works)
+6. ⏳ Add link validation to channels (allow multiple trusted domains)
+   - **Allowed domains:**
+     - `recursive.eco` (all subdomains)
+     - `goodreads.com`
+     - `claude.ai`
+     - `chatgpt.com` / `openai.com`
+     - `amazon.com`
+   - **Rationale:** Support content curation from trusted platforms
+   - Show helpful error if domain not allowed - provide contact pp@playfulprocess to ask for a different domain to be included 
+
+**Phase 8.4: CTA Banner** (Later)
+7. ⏳ Add CTA banner to viewer
+8. ⏳ Hide CTA when viewing own content - This is not necessary, we can add the CTA always with cleaner code 
+
+**Phase 8.5: Testing & Refinement**
+9. ⏳ Test full workflow end-to-end
+10. ⏳ Gather feedback from test users
+11. ⏳ Refine UX based on feedback
+
+---
+
+## Phase 9: YouTube Playlist Batch Import (OPTIONAL ENHANCEMENT)
+
+**Date:** TBD (After Phase 8 complete)
+**Status:** Future Planning
+**Goal:** Allow batch import of all videos from a YouTube playlist URL
+
+**Priority:** Low (nice-to-have after basic publishing workflow is solid)
+
+---
+
+### Feature Overview
+
+**Current State:** Users can add YouTube videos one-by-one by pasting individual URLs
+
+**Desired State:** Paste ONE YouTube playlist URL → automatically import all video IDs (up to 50)
+
+**Similar to:** Drive folder import (Phase 7) - same pattern, different API
+
+---
+
+### Implementation Plan
+
+#### **A) Backend API Route**
+
+**File:** `recursive-creator/app/api/extract-playlist/route.ts` (new)
+
+```typescript
+import { NextRequest, NextResponse } from 'next/server';
+
+export async function POST(request: NextRequest) {
+  try {
+    const { playlistUrl } = await request.json();
+
+    // Extract playlist ID from URL
+    const playlistId = extractPlaylistId(playlistUrl);
+    if (!playlistId) {
+      return NextResponse.json(
+        { error: 'Invalid YouTube playlist URL' },
+        { status: 400 }
+      );
+    }
+
+    // Use YouTube Data API v3 to fetch all videos in playlist
+    const apiKey = process.env.GOOGLE_YOUTUBE_API_KEY;
+    const response = await fetch(
+      `https://www.googleapis.com/youtube/v3/playlistItems?` +
+      `part=snippet&maxResults=50&playlistId=${playlistId}&key=${apiKey}`
+    );
+
+    if (!response.ok) {
+      throw new Error('YouTube API request failed');
+    }
+
+    const data = await response.json();
+
+    // Extract video IDs and titles
+    const videos = data.items.map((item: any) => ({
+      video_id: item.snippet.resourceId.videoId,
+      title: item.snippet.title,
+      url: `https://youtube.com/watch?v=${item.snippet.resourceId.videoId}`,
+      thumbnail: item.snippet.thumbnails.default.url
+    }));
+
+    return NextResponse.json({ videos, count: videos.length });
+  } catch (error) {
+    console.error('Playlist extraction error:', error);
+    return NextResponse.json(
+      { error: 'Failed to extract playlist videos' },
+      { status: 500 }
+    );
+  }
+}
+
+function extractPlaylistId(url: string): string | null {
+  // Handle various YouTube playlist URL formats
+  const patterns = [
+    /[?&]list=([^&]+)/,           // ?list=PLxxx
+    /\/playlist\?list=([^&]+)/,   // /playlist?list=PLxxx
+  ];
+
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
 }
 ```
 
-**Step 3: Channels Handles Submission**
-- User clicks → Opens channels.recursive.eco/submit with pre-filled data
-- User reviews/edits if needed
-- User submits through existing channels flow
-- You approve in existing channels admin (no new code needed!)
+---
 
-**Benefits:**
-- ✅ No new API needed
-- ✅ Uses existing channels submission flow
-- ✅ User can edit before submitting
-- ✅ Familiar approval workflow
-- ✅ Much simpler implementation
+#### **B) Frontend UI Addition**
+
+**File:** `recursive-creator/app/dashboard/sequences/new/page.tsx`
+
+Add next to Drive folder import button:
+
+```tsx
+{/* YouTube Playlist Import Button */}
+<button
+  onClick={() => setShowPlaylistModal(true)}
+  className="text-sm text-purple-600 hover:text-purple-700 font-medium flex items-center gap-2"
+>
+  🎬 Import YouTube Playlist
+</button>
+
+{/* Playlist Import Modal */}
+{showPlaylistModal && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className="bg-white rounded-lg p-6 max-w-md w-full">
+      <h3 className="text-xl font-bold text-gray-900 mb-4">
+        Import YouTube Playlist
+      </h3>
+      <p className="text-sm text-gray-600 mb-4">
+        Paste a YouTube playlist URL to import all videos at once (max 50 videos).
+      </p>
+
+      <input
+        type="text"
+        value={playlistUrl}
+        onChange={(e) => setPlaylistUrl(e.target.value)}
+        placeholder="https://youtube.com/playlist?list=PLxxx..."
+        className="w-full px-4 py-2 border border-gray-300 rounded mb-4"
+      />
+
+      {playlistError && (
+        <div className="bg-red-50 border border-red-200 rounded p-3 mb-4">
+          <p className="text-sm text-red-800">{playlistError}</p>
+        </div>
+      )}
+
+      <div className="flex justify-end gap-2">
+        <button
+          onClick={() => {
+            setShowPlaylistModal(false);
+            setPlaylistUrl('');
+            setPlaylistError(null);
+          }}
+          className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleImportPlaylist}
+          disabled={importingPlaylist || !playlistUrl}
+          className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50"
+        >
+          {importingPlaylist ? 'Importing...' : 'Import Videos'}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+```
+
+**Handler function:**
+
+```tsx
+const handleImportPlaylist = async () => {
+  setImportingPlaylist(true);
+  setPlaylistError(null);
+
+  try {
+    const response = await fetch('/api/extract-playlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playlistUrl })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to import playlist');
+    }
+
+    // Add all videos to items array
+    const newItems: SequenceItem[] = data.videos.map((video: any, index: number) => ({
+      position: items.length + index + 1,
+      type: 'video' as ItemType,
+      video_id: video.video_id,
+      url: video.url,
+      title: video.title
+    }));
+
+    setItems([...items, ...newItems]);
+    setShowPlaylistModal(false);
+    setPlaylistUrl('');
+
+    // Success message
+    alert(`Successfully imported ${data.count} videos!`);
+  } catch (err: any) {
+    setPlaylistError(err.message || 'Failed to import playlist');
+  } finally {
+    setImportingPlaylist(false);
+  }
+};
+```
+
+**State to add:**
+
+```tsx
+const [showPlaylistModal, setShowPlaylistModal] = useState(false);
+const [playlistUrl, setPlaylistUrl] = useState('');
+const [importingPlaylist, setImportingPlaylist] = useState(false);
+const [playlistError, setPlaylistError] = useState<string | null>(null);
+```
 
 ---
 
-#### 3. Content Reporting System (Safety)
+### Technical Details
 
-**Problem:** Need way for viewers to report inappropriate content
+**Dependencies:**
+- Google YouTube Data API key (same as Drive API key - `GOOGLE_YOUTUBE_API_KEY`)
+- Can reuse existing API key if you have one
+- Free tier: 10,000 quota units/day
+- Playlist request costs: ~3 units (1 for list + 2 for snippet data)
 
-**Solution:** Add "Report" button to viewer
+**Limitations:**
+- Only works with PUBLIC playlists
+- Max 50 videos per request (YouTube API limit)
+- If playlist has >50 videos, need pagination (future enhancement)
+- Quota limits: ~3,000 playlist imports per day on free tier
+
+**User Flow:**
+1. User clicks "🎬 Import YouTube Playlist"
+2. Modal appears with input field
+3. User pastes playlist URL (e.g., `https://youtube.com/playlist?list=PLxxx`)
+4. System validates URL format
+5. Backend calls YouTube Data API
+6. Returns array of video IDs and titles
+7. Frontend adds all videos to items array
+8. User can review, reorder, remove, or edit titles
+9. Save as normal sequence
+
+---
+
+### Estimated Time & Priority
+
+**Time Estimate:** 2-3 hours (similar to Drive folder import complexity)
+
+**Priority:** **LOW** - Optional enhancement after core publishing workflow (Phase 8) is complete
+
+**When to implement:**
+- ✅ Phase 8 (publishing workflow + licensing) is complete
+- ✅ Users are actively creating playlists
+- ✅ Users request this feature (measure demand first!)
+
+**Why low priority:**
+- Current workflow (one-by-one) works fine for most use cases
+- Playlists are typically 5-10 videos, not 50
+- Can add later based on user feedback
+
+---
+
+## Phase 10: Content Reporting & Auto-Moderation (FUTURE)
+
+**Problem:** Need way for viewers to report inappropriate content while preventing abuse
+
+**Solution:** Automatic moderation with appeals process (no manual dashboard needed!)
 
 **Location:** `/view.html` (recursive-landing)
 
@@ -1635,406 +2229,69 @@ if (publishSuccess && publishedUrl) {
 </div>
 ```
 
-**Report Flow:**
+**Auto-Moderation Flow:**
+
+**1. First Report (on any content):**
 ```javascript
-// Click Report → Modal opens
-function showReportModal() {
-  const modal = `
-    <h3>Report Inappropriate Content</h3>
-    <p>What's wrong with this story?</p>
-    <label>
-      <input type="radio" name="reason" value="explicit">
-      Explicit/sexual content
-    </label>
-    <label>
-      <input type="radio" name="reason" value="violence">
-      Graphic violence
-    </label>
-    <label>
-      <input type="radio" name="reason" value="hate">
-      Hate speech/discrimination
-    </label>
-    <label>
-      <input type="radio" name="reason" value="other">
-      Other (describe below)
-    </label>
-    <textarea placeholder="Additional details (optional)"></textarea>
-
-    <button onclick="submitReport()">Submit Report</button>
-  `;
-}
-
 async function submitReport() {
   // POST /api/report-content
-  // - content_id (story UUID)
-  // - reason (explicit/violence/hate/other)
-  // - details (optional text)
-  // - reporter_ip (for abuse prevention, NOT stored permanently)
-  //
-  // Email YOU immediately with report details
-  // Show "Thank you" message to reporter
-  // Do NOT notify story creator (privacy)
+  const response = await fetch('/api/report-content', {
+    method: 'POST',
+    body: JSON.stringify({
+      content_id: storyId,
+      reason: selectedReason, // explicit/violence/hate/other
+      details: optionalText
+    })
+  });
+
+  // AUTOMATIC ACTIONS:
+  // 1. Unpublish the reported content (set is_public = false)
+  // 2. Increment report_count on that content
+  // 3. Increment total_reports_received on creator's profile
+  // 4. Send email to creator: "Your story was reported and unpublished. Reply to appeal."
+  // 5. Send email to admin: "Content reported and auto-unpublished. Details: [reason]"
+  // 6. Show "Thank you" to reporter
 }
 ```
 
-**Moderation Dashboard:**
-- New section in recursive-channels admin
-- Shows all reports
-- Can view reported story
-- Actions: Remove story, dismiss report, ban creator
-
----
-
-#### 4. Licensing & Legal Framework
-
-**Current Requirement:** "Creative Commons with recursive.eco as sole owner"
-
-**⚠️ IMPORTANT LEGAL ISSUE:**
-
-This creates a **contradiction**:
-- Creative Commons = Community ownership, remixing allowed
-- "Sole owner" = Exclusive ownership, no remixing
-
-**Recommendation:** Use **Creative Commons BY-SA 4.0** WITHOUT "sole owner" clause
-
-**Why:**
-- Aligns with your "gateway building" mission
-- Allows parents to remix each other's stories
-- Protects you legally (attribution required, share-alike enforced)
-- Standard for community platforms (Wikipedia, Khan Academy use this)
-
-**Proposed License:**
-
-```
-All stories submitted to Recursive.eco are licensed under:
-Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
-
-This means:
-✅ Anyone can use, remix, and build upon stories
-✅ Must give credit to original creator
-✅ Must license remixes under same terms (share-alike)
-✅ Commercial use allowed (aligns with Free Software values)
-
-Recursive.eco rights:
-✅ Host and display all community stories
-✅ Moderate content (remove inappropriate stories)
-✅ Aggregate stories into collections/channels
-❌ We do NOT claim ownership of your stories
-✅ You retain copyright, we have a perpetual license to host
-
-Moderation policy:
-- Stories may be removed at any time without explanation
-- Removal reasons: inappropriate content, copyright violations, community safety
-- No appeals process (you are the sole moderator)
+**2. Third Report (across all user's content):**
+```javascript
+// When total_reports_received >= 3:
+// AUTOMATIC ACTIONS:
+// 1. Set account_status = 'on_hold' in profiles
+// 2. Unpublish ALL their content
+// 3. Block new publishing (show message: "Account on hold, contact support")
+// 4. Send email to creator: "Your account is on hold due to multiple reports. You may appeal by replying to this email with your explanation."
+// 5. Send email to admin: "User account on hold after 3 reports. Awaiting your review of appeals."
 ```
 
-**Alternative if you MUST have ownership:**
+**3. Appeals Process:**
+- Creator replies to email with explanation
+- You manually review the appeal
+- Options:
+  - **Restore:** Change account_status back to 'active', allow republishing
+  - **Ban:** Change account_status to 'banned', permanent restriction
+  - **Partial restore:** Restore account but keep specific content unpublished
 
-Use **CC0 (Public Domain)** instead:
-- Creators waive ALL rights
-- Stories become public domain
-- You (and everyone) can do anything with them
-- More legally clear than "CC + sole owner"
+**Database Structure:**
+```sql
+-- Add to user_documents
+ALTER TABLE user_documents ADD COLUMN report_count INTEGER DEFAULT 0;
 
-**My Recommendation:** CC BY-SA 4.0 is better for community trust
-
----
-
-#### 5. Terms of Service Updates
-
-**New sections needed:**
-
-**5.1 User-Generated Content**
-```
-When you publish a story on Recursive.eco:
-
-1. You represent that you own or have rights to all content (text, images, videos)
-2. You grant Recursive.eco a perpetual, worldwide, non-exclusive license to host and display your content
-3. You agree to license your story under CC BY-SA 4.0 to the community
-4. You acknowledge that stories may be submitted to community channels for discovery
-5. You understand that stories are public and may be indexed by search engines
+-- Add to profiles
+ALTER TABLE profiles ADD COLUMN account_status TEXT DEFAULT 'active'; -- 'active' | 'on_hold' | 'banned'
+ALTER TABLE profiles ADD COLUMN total_reports_received INTEGER DEFAULT 0;
 ```
 
-**5.2 Content Moderation**
-```
-Recursive.eco reserves the right to:
+**Benefits:**
+- ✅ Immediate action on reports (safety first)
+- ✅ No moderation dashboard needed initially
+- ✅ Prevents abuse (manual appeals review catches false reports)
+- ✅ Scales with community (only review appeals, not every report)
+- ✅ Email-based workflow (simple, no new UI needed)
 
-1. Review all stories before appearing in community channels
-2. Remove any story at any time without notice or explanation
-3. Disable accounts that violate community standards
-4. No appeals process - moderation decisions are final
-
-Community standards:
-- Content must be appropriate for children
-- No explicit sexual content, graphic violence, hate speech
-- No copyrighted material without permission
-- No spam, advertising, or commercial promotion
-```
-
-**5.3 Liability & Indemnification**
-```
-Recursive.eco is a platform for community storytelling:
-
-1. We do not guarantee accuracy, safety, or appropriateness of community content
-2. Parents/guardians are responsible for supervising children's content consumption
-3. We are not liable for user-generated content
-4. You indemnify us against claims arising from your submitted content
-5. Use at your own risk - community moderation is best-effort, not guaranteed
-```
-
-**5.4 COPPA Compliance** (already addressed, but clarify)
-```
-Recursive.eco does not collect personal information from children:
-
-1. Platform is designed for parents/creators (13+)
-2. Viewing stories does not require account creation
-3. No tracking cookies on viewer pages
-4. If you are under 13, you may view stories but not create an account
-```
-
-**5.5 DMCA & Copyright**
-```
-If you believe content infringes your copyright:
-
-1. Email: [dmca@recursive.eco]
-2. Include: URL, description of copyrighted work, contact info
-3. We will investigate and remove infringing content
-4. Repeat infringers will be banned
-```
-
----
-
-### Implementation Plan (Phased Approach)
-
-#### Phase 8.1: Foundation (Week 1)
-
-**Tasks:**
-- [ ] Add Terms of Service page (`/terms`) with new sections
-- [ ] Add Privacy Policy page (`/privacy`) - already exists?
-- [ ] Create CC BY-SA 4.0 license page (`/license`)
-- [ ] Add license acknowledgment checkbox to story creator
-- [ ] Update footer links to include Terms, Privacy, License
-
-**Files:**
-- `recursive-landing/terms.html` (new)
-- `recursive-landing/privacy.html` (update?)
-- `recursive-landing/license.html` (new)
-- `recursive-creator/app/dashboard/sequences/new/page.tsx` (add checkbox)
-
-#### Phase 8.2: Call-to-Action (Week 1)
-
-**Tasks:**
-- [ ] Add "Create Your Own Story" banner to `/view.html`
-- [ ] Detect if viewer is viewing their own story (hide CTA)
-- [ ] Track clicks (simple counter, no personal data)
-- [ ] A/B test placement (above vs below story)
-
-**Files:**
-- `recursive-landing/view.html` (add CTA banner)
-
-#### Phase 8.3: Community Submission Flow (Week 2) - SIMPLIFIED!
-
-**Tasks:**
-- [ ] Add "Submit to Community" button to publish success message
-- [ ] Build pre-filled URL with story data (link, title, description)
-- [ ] Ensure channels.recursive.eco/submit accepts URL params
-- [ ] ~~No API needed!~~ Uses existing channels flow
-
-**Files:**
-- `recursive-creator/app/dashboard/sequences/new/page.tsx` (add button to success message)
-- `recursive-channels-fresh/` (verify submit form accepts query params)
-
-**Implementation:**
-```typescript
-// In publish success section
-const channelSubmitUrl = `https://channels.recursive.eco/submit?` +
-  `link=${encodeURIComponent(publishedUrl)}` +
-  `&title=${encodeURIComponent(title)}` +
-  `&description=${encodeURIComponent(description || '')}` +
-  `&channel=kids-stories`;
-```
-
-**Much simpler than original plan - no new database tables, no API routes!**
-
-#### Phase 8.4: Content Reporting (Week 2)
-
-**Tasks:**
-- [ ] Add Report button to viewer
-- [ ] Create report modal UI
-- [ ] Build `/api/report-content` endpoint
-- [ ] Email you on new reports (high priority)
-- [ ] Create reports dashboard in channels admin
-
-**Files:**
-- `recursive-landing/view.html` (add report button)
-- Backend API for report handling
-
-#### Phase 8.5: Moderation Tools (Week 3)
-
-**Tasks:**
-- [ ] Build admin dashboard for reviewing submissions
-- [ ] Add approve/deny actions
-- [ ] Build reports review interface
-- [ ] Add ban/unban user functionality
-- [ ] Create moderation log for tracking decisions
-
-**Files:**
-- `recursive-channels-fresh/app/admin/stories/page.tsx` (new)
-- `recursive-channels-fresh/app/admin/reports/page.tsx` (new)
-
----
-
-### Open Questions & Decisions Needed
-
-**1. Licensing:**
-- ✅ **My recommendation:** CC BY-SA 4.0 (community-friendly, legally sound)
-- ⚠️ Alternative: CC0 Public Domain (if you want zero ownership claims)
-- ❌ Not recommended: "CC + sole owner" (legally contradictory)
-
-**Your decision:** Which license should we use?
-
-**2. CTA Placement:**
-- A) Above story (high visibility, might be intrusive)
-- B) Below story (after viewing, might be missed)
-- C) Fixed banner at bottom (always visible, might annoy)
-
-**Your decision:** Which placement?
-
-**3. Moderation Transparency:**
-- Your requirement: "Deny without explanation"
-- Tradeoff: Less transparency, but faster moderation
-- Alternative: Generic reasons ("didn't meet community standards")
-
-**Your decision:** Stick with no-explanation policy?
-
-**4. Community Channel:**
-- Option A: Dedicated "Kids Stories" channel in recursive-channels
-- Option B: Multiple channels (by age, theme, culture)
-- Option C: Tag-based system (creators tag their own stories)
-
-**Your decision:** How should stories be organized in channels?
-
-**5. Creator Attribution:**
-- Show real names? (encourages quality, but privacy concern)
-- Show usernames? (more anonymous, but less personal)
-- Show "By: [Name/Username]" on viewer?
-
-**Your decision:** How should creators be credited?
-
----
-
-### Risk Assessment
-
-**High Risk:**
-- **Legal liability** for user content (mitigated by ToS, DMCA process)
-- **Child safety** if inappropriate content gets through (mitigated by reporting + moderation)
-- **Copyright infringement** if creators upload copyrighted images (mitigated by license checkbox + DMCA)
-
-**Medium Risk:**
-- **Spam/abuse** of submission system (mitigated by account requirement + rate limiting)
-- **Moderation burnout** as community grows (need clear boundaries from start)
-
-**Low Risk:**
-- **Server costs** for hosting images (you're using Google Drive, so minimal)
-
-**Mitigation Strategies:**
-1. Clear ToS that limits your liability
-2. Robust reporting system
-3. Conservative moderation (when in doubt, deny)
-4. Email notifications for all reports (immediate action)
-5. Ban repeat offenders quickly
-
----
-
-### Success Metrics (How to know it's working)
-
-**Month 1:**
-- 10+ stories submitted to community
-- 50+ unique viewers of community stories
-- Zero safety incidents (reports handled < 24hrs)
-
-**Month 3:**
-- 50+ stories in community library
-- 500+ unique viewers
-- 5+ active creator accounts (multiple stories each)
-
-**Month 6:**
-- 100+ stories
-- 2000+ unique viewers
-- Organic growth (parents telling other parents)
-- First remix/adaptation of existing story
-
-**Long-term Vision:**
-- Self-sustaining community
-- Cultural diversity in story library
-- Parents teaching each other to create
-- Integration with schools/libraries
-
----
-
-### Technical Architecture Summary
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    COMMUNITY PLATFORM                        │
-└─────────────────────────────────────────────────────────────┘
-
-┌──────────────────┐        ┌──────────────────┐
-│  Viewer (Public) │        │ Creator (Auth)   │
-│  recursive.eco   │        │ creator.r.eco    │
-└──────────────────┘        └──────────────────┘
-         │                           │
-         │ 1. Views story            │ 2. Publishes story
-         │ 2. Sees CTA               │ 3. Submits to community
-         │ 3. Can report             │
-         │                           │
-         └───────────┬───────────────┘
-                     │
-         ┌───────────▼────────────┐
-         │   Supabase Database    │
-         │                        │
-         │ - user_documents       │ (stories)
-         │ - community_submissions│ (pending queue)
-         │ - content_reports      │ (safety)
-         │ - channels             │ (approved stories)
-         └────────────────────────┘
-                     │
-         ┌───────────▼────────────┐
-         │   Admin Dashboard      │
-         │   channels.r.eco       │
-         │                        │
-         │ - Review submissions   │
-         │ - Handle reports       │
-         │ - Moderate content     │
-         │ - Ban users            │
-         └────────────────────────┘
-```
-
----
-
-### Next Steps
-
-1. **Review this plan** and make decisions on open questions
-2. **Update Terms of Service** (highest priority - legal protection)
-3. **Choose license** (CC BY-SA 4.0 recommended)
-4. **Start with Phase 8.1** (foundation + legal pages)
-5. **Iterate based on community feedback**
-
----
-
-**Your Turn:**
-
-Please review and decide:
-- [ ] License choice (CC BY-SA 4.0 vs CC0 vs other)
-- [ ] CTA placement (above/below/fixed banner)
-- [ ] Channel organization (single channel vs multiple)
-- [ ] Creator attribution (names vs usernames)
-- [ ] Any changes to the plan
-
-Once decided, we can start implementation!
+**When to implement:** After Phase 8 is complete and community features are active
 
 ---
 
 **END OF CONTEXT FILE**
-
-*This file will be updated as we progress. Always read this first when resuming!*

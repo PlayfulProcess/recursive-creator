@@ -41,6 +41,7 @@ function NewSequencePageContent() {
   const [success, setSuccess] = useState(false);
   const [isPublished, setIsPublished] = useState(false);
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
+  const [publishedDocId, setPublishedDocId] = useState<string | null>(null);
 
   // Drive folder import modal
   const [showImportModal, setShowImportModal] = useState(false);
@@ -77,11 +78,13 @@ function NewSequencePageContent() {
       const isPublishedValue = data.document_data.is_published === 'true';
       setIsPublished(isPublishedValue);
 
-      // Set published URL if published
+      // Set published URL and doc ID if published
       if (isPublishedValue) {
         setPublishedUrl(`https://recursive.eco/view/${id}`);
+        setPublishedDocId(id);
       } else {
         setPublishedUrl(null);
+        setPublishedDocId(null);
       }
 
       if (data.document_data.items && data.document_data.items.length > 0) {
@@ -502,6 +505,7 @@ function NewSequencePageContent() {
           }
 
           setPublishedUrl(`https://recursive.eco/view/${insertData.id}`);
+          setPublishedDocId(insertData.id);
           setIsPublished(true);
         } else {
           setIsPublished(false);
@@ -944,7 +948,7 @@ function NewSequencePageContent() {
                     Claude/ChatGPT (AI tools), Amazon (products), or Google Drive (shared files).
                   </p>
                   <a
-                    href={`https://channels.recursive.eco/submit?link=${encodeURIComponent(publishedUrl)}&title=${encodeURIComponent(title)}&description=${encodeURIComponent(description || '')}&channel=kids-stories`}
+                    href={`https://channels.recursive.eco/submit?doc_id=${publishedDocId}&channel=kids-stories`}
                     target="_blank"
                     rel="noopener"
                     className="inline-block px-6 py-2 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition-colors"
