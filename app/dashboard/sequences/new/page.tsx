@@ -189,6 +189,7 @@ function NewSequencePageContent() {
   const extractYouTubeId = (url: string): string => {
     const patterns = [
       /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
+      /youtube\.com\/shorts\/([^&\n?#]+)/,  // YouTube Shorts support
       /^([a-zA-Z0-9_-]{11})$/
     ];
 

@@ -1921,9 +1921,17 @@ git push origin main
 
 ### Implementation Priority (REVISED 2025-11-19)
 
-**Phase 8.1: Legal Foundation** ✅ COMPLETE
+**Phase 8.1: Legal Foundation** ✅ COMPLETE - not actually... 
 1. ✅ Update about.html with licensing section
 2. ✅ Add license checkbox to creator dashboard
+
+#### USer comments on revisions:
+There is just one thing missing here. I tested the workflow again and the recursive creator submission is actually submitting to the wellness channels. I think we just need to change the way the URL is being built.
+
+Right now, it is: https://channels.recursive.eco/?doc_id=f37a5678-aeaf-46f3-81a0-7a90d5e59455&channel=kids-stories
+
+I think it need to start with this for Supabase to recognize the right channel when publishing, what do you think?
+https://channels.recursive.eco/channels/kids-stories
 
 **Phase 8.2: Submit to Community Button** 🔄 NEXT (Test workflow FIRST)
 3. ⏳ Add "Submit to Community" success modal in creator
@@ -2291,6 +2299,1641 @@ ALTER TABLE profiles ADD COLUMN total_reports_received INTEGER DEFAULT 0;
 - ✅ Email-based workflow (simple, no new UI needed)
 
 **When to implement:** After Phase 8 is complete and community features are active
+
+---
+
+## Phase 11: YouTube End-Screen Overlay (Hide Suggested Videos)
+
+**Date:** 2025-11-20
+**Status:** Planning
+**Goal:** Prevent YouTube suggested videos thumbnails from appearing at video end
+**Priority:** HIGH (improves "safer for kids" value proposition)
+
+---
+
+### Problem Statement
+
+**Current Issue:**
+- YouTube's `rel=0` parameter NO LONGER works (deprecated since 2018)
+- End-screen shows related videos from other channels (can't be fully hidden)
+- Defeats our "safer for kids" and "bounded experience" goals
+- Users might click away to random YouTube content
+
+**User Request:**
+> "Can you help me prevent the showcase of additional thumbnails at the end of youtube videos? rel=0 does no longer do that."
+
+**Suggested Solution:**
+Use `enablejsapi=1` with YouTube IFrame Player API to:
+1. Detect when video ends (`onStateChange` event)
+2. Overlay custom UI (replay button, next item button, or static image)
+3. Cover the suggested videos completely
+
+---
+
+### Current Implementation
+
+**File:** `components/viewers/SequenceViewer.tsx:150-156`
+
+```tsx
+<iframe
+  src={`https://www.youtube-nocookie.com/embed/${currentItem.video_id}?rel=0&modestbranding=1`}
+  title={currentItem.title || `Video ${currentItem.position}`}
+  className="w-full aspect-video rounded-lg"
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+  allowFullScreen
+/>
+```
+
+**Current Parameters:**
+- ✅ `youtube-nocookie.com` - Privacy-enhanced mode
+- ✅ `rel=0` - Attempts to hide related videos (NO LONGER WORKS)
+- ✅ `modestbranding=1` - Minimal YouTube branding
+
+---
+
+### Proposed Solution: YouTube IFrame Player API Integration
+
+#### **Step 1: Load YouTube IFrame API**
+
+Add to `components/viewers/SequenceViewer.tsx`:
+
+```tsx
+// Add to component imports
+import Script from 'next/script';
+
+// Add state for player
+const [youtubePlayer, setYoutubePlayer] = useState<any>(null);
+const [videoEnded, setVideoEnded] = useState(false);
+const playerRef = useRef<any>(null);
+
+// Add effect to initialize player when API loads
+useEffect(() => {
+  // Make onYouTubeIframeAPIReady available globally
+  (window as any).onYouTubeIframeAPIReady = () => {
+    console.log('YouTube IFrame API ready');
+  };
+}, []);
+
+// Add effect to create player when video changes
+useEffect(() => {
+  if (currentItem.type === 'video' && currentItem.video_id && currentItem.video_id.length === 11) {
+    // Reset video ended state when changing videos
+    setVideoEnded(false);
+
+    // Wait for API to be ready, then create player
+    if ((window as any).YT && (window as any).YT.Player) {
+      const player = new (window as any).YT.Player(`youtube-player-${currentItem.video_id}`, {
+        videoId: currentItem.video_id,
+        playerVars: {
+          rel: 0,
+          modestbranding: 1,
+          enablejsapi: 1
+        },
+        events: {
+          onStateChange: (event: any) => {
+            // YT.PlayerState.ENDED = 0
+            if (event.data === 0) {
+              setVideoEnded(true);
+            }
+          }
+        }
+      });
+
+      setYoutubePlayer(player);
+      playerRef.current = player;
+    }
+  }
+
+  // Cleanup player on unmount or item change
+  return () => {
+    if (playerRef.current) {
+      playerRef.current.destroy();
+      playerRef.current = null;
+    }
+  };
+}, [currentItem]);
+```
+
+#### **Step 2: Update YouTube Embed Structure**
+
+Replace iframe with div for YouTube Player API:
+
+```tsx
+{currentItem.type === 'video' && (
+  <div className="w-full h-full flex items-center justify-center p-4 relative">
+    <div className="w-full max-w-4xl relative">
+      {currentItem.video_id && currentItem.video_id.length === 11 ? (
+        // YouTube video with Player API
+        <>
+          <div
+            id={`youtube-player-${currentItem.video_id}`}
+            className="w-full aspect-video rounded-lg"
+          />
+
+          {/* Custom overlay when video ends */}
+          {videoEnded && (
+            <div className="absolute inset-0 bg-black/90 rounded-lg flex flex-col items-center justify-center gap-6 z-10">
+              <div className="text-center">
+                <h3 className="text-white text-2xl font-bold mb-2">
+                  {currentItem.title || 'Video Complete'}
+                </h3>
+                <p className="text-gray-300">
+                  What would you like to do next?
+                </p>
+              </div>
+
+              <div className="flex gap-4">
+                {/* Replay Button */}
+                <button
+                  onClick={() => {
+                    playerRef.current?.seekTo(0);
+                    playerRef.current?.playVideo();
+                    setVideoEnded(false);
+                  }}
+                  className="px-8 py-4 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold flex items-center gap-2 transition-all"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Replay
+                </button>
+
+                {/* Next Item Button (if not last) */}
+                {currentIndex < items.length - 1 && (
+                  <button
+                    onClick={() => {
+                      setVideoEnded(false);
+                      goToNext();
+                    }}
+                    className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold flex items-center gap-2 transition-all"
+                  >
+                    Next Item
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                )}
+
+                {/* Back to Start Button (if last item) */}
+                {currentIndex === items.length - 1 && (
+                  <button
+                    onClick={() => {
+                      setVideoEnded(false);
+                      setCurrentIndex(0);
+                    }}
+                    className="px-8 py-4 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold flex items-center gap-2 transition-all"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                    </svg>
+                    Back to Start
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        // Google Drive video (unchanged)
+        <iframe
+          src={`https://drive.google.com/file/d/${currentItem.video_id}/preview`}
+          title={currentItem.title || `Video ${currentItem.position}`}
+          className="w-full aspect-video rounded-lg"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+        />
+      )}
+    </div>
+
+    {/* Video title overlay (keep existing) */}
+    {currentItem.title && !videoEnded && (
+      <div className="absolute bottom-8 left-0 right-0 text-center pointer-events-none">
+        <p className="text-white text-lg px-6 py-3 bg-black/50 rounded-lg backdrop-blur-sm inline-block">
+          {currentItem.title}
+        </p>
+      </div>
+    )}
+  </div>
+)}
+```
+
+#### **Step 3: Add YouTube API Script Tag**
+
+Add to the component return (before the main div):
+
+```tsx
+return (
+  <>
+    {/* Load YouTube IFrame API */}
+    <Script
+      src="https://www.youtube.com/iframe_api"
+      strategy="afterInteractive"
+      onLoad={() => {
+        console.log('YouTube API script loaded');
+      }}
+    />
+
+    <div
+      ref={containerRef}
+      className="relative w-full h-screen bg-black flex flex-col"
+      // ... rest of component
+    >
+```
+
+---
+
+### Implementation Checklist
+
+**Phase 11.1: Basic Integration**
+- [ ] Add YouTube IFrame API script tag with Next.js `<Script>`
+- [ ] Add state management for player and video end detection
+- [ ] Replace YouTube iframe with API-controlled div
+- [ ] Initialize YouTube Player with `enablejsapi=1`
+- [ ] Add `onStateChange` event listener for video end (state = 0)
+
+**Phase 11.2: Custom End-Screen Overlay**
+- [ ] Create overlay component (dark background with controls)
+- [ ] Add "Replay" button (seeks to 0, plays video)
+- [ ] Add "Next Item" button (navigates to next, if exists)
+- [ ] Add "Back to Start" button (goes to first item, if at end)
+- [ ] Style overlay to match existing dark mode design
+
+**Phase 11.3: Edge Cases & Polish**
+- [ ] Handle manual navigation away from ended video (reset `videoEnded` state)
+- [ ] Handle fullscreen mode (overlay should work in fullscreen too)
+- [ ] Test with playlists that mix images and videos
+- [ ] Test swipe navigation while overlay is showing
+- [ ] Ensure keyboard navigation still works
+
+**Phase 11.4: Testing**
+- [ ] Test on mobile (touch targets large enough?)
+- [ ] Test on desktop (hover states work?)
+- [ ] Test with sequences of all videos
+- [ ] Test with mixed sequences (images + videos)
+- [ ] Test in fullscreen mode
+- [ ] Verify suggested videos are completely hidden
+
+---
+
+### Technical Details
+
+**YouTube Player States:**
+- `-1` (unstarted)
+- `0` (ended) ← **This is what we detect**
+- `1` (playing)
+- `2` (paused)
+- `3` (buffering)
+- `5` (video cued)
+
+**API Documentation:**
+- [YouTube IFrame Player API](https://developers.google.com/youtube/iframe_api_reference)
+- [Player Parameters](https://developers.google.com/youtube/player_parameters)
+- [Events Reference](https://developers.google.com/youtube/iframe_api_reference#Events)
+
+**Key Parameters:**
+- `enablejsapi=1` - Enable API control
+- `rel=0` - Still include (limits related videos to same channel)
+- `modestbranding=1` - Minimal YouTube branding
+
+**Why This Works:**
+- ✅ Overlay covers the entire iframe when video ends
+- ✅ `z-index: 10` ensures overlay is on top
+- ✅ User can't see or click suggested videos
+- ✅ Maintains "bounded experience" goal
+- ✅ Provides clear next actions (replay, next, or restart)
+
+---
+
+### Benefits
+
+**For Parents (Safety):**
+- ✅ Kids can't click random suggested videos
+- ✅ Bounded experience - stays within your curated content
+- ✅ Clear navigation options at video end
+
+**For Creators (Control):**
+- ✅ Your playlists stay cohesive
+- ✅ Viewers engage with YOUR sequence, not YouTube's suggestions
+- ✅ Professional, polished UX
+
+**For Platform (Value Prop):**
+- ✅ Strengthens "safer for kids" positioning
+- ✅ Differentiates from raw YouTube embeds
+- ✅ Aligns with "narrative context" goal (you control the flow)
+
+---
+
+### Alternative Approaches (Considered & Rejected)
+
+**Option A: CSS-only overlay**
+- ❌ Can't detect video end without API
+- ❌ Timing would be manual and unreliable
+
+**Option B: Custom video player (not YouTube)**
+- ❌ Massive complexity increase
+- ❌ Violates YouTube ToS (can't download videos)
+- ❌ Loses YouTube features (quality switching, captions, etc.)
+
+**Option C: Just accept suggested videos**
+- ❌ Defeats "safer for kids" goal
+- ❌ Undermines platform value proposition
+- ❌ User explicitly requested this feature
+
+**Option D (CHOSEN): YouTube IFrame Player API**
+- ✅ Official YouTube API
+- ✅ Detects video end reliably
+- ✅ Allows custom overlay
+- ✅ Maintains YouTube features
+- ✅ 2-3 hours implementation time
+
+---
+
+### Estimated Time
+
+**Total:** 3-4 hours
+
+**Breakdown:**
+- 1 hour: API integration + player initialization
+- 1 hour: Custom overlay UI + button logic
+- 1 hour: Testing edge cases (navigation, fullscreen, etc.)
+- 30 min: Polish and refinement
+
+---
+
+### Priority Justification
+
+**Why HIGH Priority:**
+1. User explicitly requested this feature
+2. Directly supports "safer for kids" value proposition
+3. YouTube removed `rel=0` functionality - we need a replacement
+4. Differentiates our platform from basic YouTube embeds
+5. Relatively quick implementation (3-4 hours)
+
+**When to Implement:**
+- Can be done in parallel with Phase 8 (publishing workflow)
+- OR immediately after Phase 8.1 (legal foundation) is complete
+- Does not depend on other features
+
+---
+
+### Next Steps
+
+**Branch Strategy:**
+- Working on existing branch: `dev/feature/publishing-workflow` (across all projects)
+- Switch to this branch in both recursive-creator AND recursive-landing
+- Implement YouTube fix in both places
+
+**Implementation Order:**
+
+**Phase 11A: Fix in recursive-creator (React viewer)**
+1. Switch to `dev/feature/publishing-workflow` branch
+2. Implement Phase 11.1 (basic API integration) in `SequenceViewer.tsx`
+3. Implement Phase 11.2 (custom overlay) in React
+4. Test thoroughly (Phase 11.3-11.4)
+
+**Phase 11B: Fix in recursive-landing (Vanilla JS viewer)**
+1. Switch recursive-landing to `dev/feature/publishing-workflow` branch
+2. Implement same logic in `pages/content/viewer.html` (vanilla JS)
+3. Simpler implementation (no React boilerplate)
+4. Test to ensure iframe embedding still works from creator
+
+**Phase 11C: Testing & Deployment**
+1. Test both viewers independently
+2. Test creator → landing iframe integration
+3. Deploy to dev for user testing
+4. Merge to main once validated
+
+**User Testing Questions:**
+- Does the overlay completely hide suggested videos?
+- Are the buttons easy to tap on mobile?
+- Does it feel natural in the sequence viewing flow?
+- Any edge cases where overlay doesn't appear?
+- Does iframe embedding still work correctly?
+
+**Note:** Vanilla JS implementation in recursive-landing will be simpler and more direct than React version. Both will use the same YouTube IFrame Player API core logic.
+
+---
+
+### Phase 11 - User Testing Feedback & Bug Fixes (2025-11-20)
+
+**Status:** 🔄 IN PROGRESS - Bugs found, fixes needed
+
+**What Was Completed:**
+- ✅ Phase 11A: YouTube Player API implemented in recursive-creator (SequenceViewer.tsx)
+- ✅ Phase 11B: YouTube Player API implemented in recursive-landing (view.html)
+- ✅ Both viewers have end-screen overlay with Replay/Next buttons
+- ✅ Both viewers have play/pause overlay controls
+- ✅ Locked experience with controls=0, fs=0, iv_load_policy=3
+
+**Issues Found During Testing:**
+
+**Issue #1: recursive-landing Fullscreen Sizing** 🐛 HIGH PRIORITY
+- **Problem:** Fullscreen mode works, but YouTube video only renders in ~1/8th of the screen
+- **Expected:** Video should fill the entire fullscreen area
+- **Root Cause:** Missing CSS for fullscreen YouTube player sizing
+- **File:** `recursive-landing/view.html`
+- **Fix Needed:** Add fullscreen CSS rules for YouTube player container
+
+**Issue #5: Overlay Buttons Don't Work in Fullscreen** 🐛 CRITICAL
+- **Problem:** Replay and Next buttons prevent thumbnails but don't respond to clicks in fullscreen
+- **User Report:** "The buttons are at least preventing the thumbnails to show, but the replay and next button do not work in fullscreen mode"
+- **Works in:** Non-fullscreen mode ✅
+- **Fails in:** Fullscreen mode ❌
+- **Root Cause (CONFIRMED via research):**
+  - When element enters fullscreen, it enters browser's "top layer"
+  - Z-index doesn't work in top layer
+  - Only DIRECT CHILDREN of fullscreen element are clickable
+  - Our overlay buttons might not be proper children of `#viewer-container`
+- **Official Documentation:** [MDN Fullscreen API Guide](https://developer.mozilla.org/en-US/docs/Web/API/Fullscreen_API/Guide) and [Chrome Top Layer](https://developer.chrome.com/blog/what-is-the-top-layer)
+- **Console Logs Show:**
+  - Video end detection works: "Video ended, showing overlay" ✅
+  - Navigation works in normal mode: "Displaying item 2/2" ✅
+  - No errors when clicking in fullscreen (events not reaching buttons) ❌
+- **Fix Strategy:** Ensure overlay is direct child of fullscreen container, not dynamically inserted
+
+**Issue #6: Buttons Don't Show After Replay** 🐛 HIGH PRIORITY
+- **Problem:** "When I replayed the video once, the buttons did not show again"
+- **User Report:** After clicking Replay, overlay doesn't appear when video ends again
+- **Suspected Cause:** State management bug - `videoEnded` not resetting properly or overlay class not being toggled
+- **File:** `recursive-landing/view.html`
+- **Fix Needed:** Debug replay button logic, ensure overlay state resets correctly
+
+**Issue #2: recursive-creator Needs Full YouTube Controls** 🎯 HIGH PRIORITY
+- **Problem:** Locked experience (controls=0, fs=0) is correct for VIEWERS but wrong for CREATORS
+- **User Feedback:** "I want to enable back all of youtube functionalities, because that is really important when creating"
+- **Reasoning:** Creators need full YouTube controls while editing/previewing:
+  - Quality settings
+  - Playback speed
+  - Captions/subtitles
+  - Timeline scrubbing
+  - YouTube fullscreen (separate from our fullscreen)
+- **Solution:** Different player configurations for creator preview vs. public viewer
+  - **Creator mode** (recursive-creator preview): `controls=1, fs=1` (full controls)
+  - **Viewer mode** (recursive-landing public): `controls=0, fs=0` (locked experience)
+- **File:** `recursive-creator/components/viewers/SequenceViewer.tsx`
+
+**Issue #3: Content Area Cut Off at Bottom** 🐛 MEDIUM PRIORITY
+- **Problem:** "The box where the images and movies are rendering are cut in the bottom" (not in fullscreen)
+- **Affects:** Both recursive-creator and recursive-landing
+- **Suspected Cause:** Container height or padding issues
+- **Fix Needed:** Investigate container CSS, ensure full content visible
+
+**Issue #4: Fullscreen Button Missing in recursive-creator** 🐛 HIGH PRIORITY
+- **Problem:** "Before there was a fullscreen button coming from the react app that is no longer showing"
+- **Location:** Should be in viewer controls at bottom
+- **File:** `recursive-creator/components/viewers/SequenceViewer.tsx:385-408`
+- **Expected:** Fullscreen button should always be visible (not tied to overlay visibility)
+
+---
+
+### Phase 11C: Bug Fixes & UX Enhancements Implementation Plan
+
+**User Decision on Issue #2:** Keep YouTube Player API, change to `controls=1, fs=1` for creator mode
+
+**New UX Requirements for recursive-landing:**
+- Add visible play/pause button (not just hover overlay)
+- Add video timeline scrubbing controls (seek forward/backward)
+- Make video controls more discoverable and accessible
+
+**Priority Order:**
+1. **Fix #4** - Restore fullscreen button in recursive-creator (5 min)
+2. **Fix #2** - Enable full YouTube controls for creator mode (10 min) - Keep API, set controls=1, fs=1
+3. **Fix #5** - Fix overlay buttons not clickable in fullscreen (CRITICAL - 20 min)
+4. **Fix #6** - Fix buttons not showing after replay (10 min)
+5. **Enhancement #1** - Add play/pause button to recursive-landing viewer (15 min)
+6. **Enhancement #2** - Add timeline scrubbing controls to recursive-landing (30 min)
+7. **Fix #1** - Fix fullscreen YouTube sizing in recursive-landing (15 min)
+8. **Fix #3** - Fix content area bottom cut-off (20 min investigation + fix)
+
+---
+
+#### Fix #1: recursive-landing Fullscreen YouTube Sizing
+
+**File:** `recursive-landing/view.html`
+
+**Problem:** YouTube player not filling fullscreen
+
+**Current CSS (lines 77-117):**
+```css
+#viewer-container:fullscreen {
+    background: black;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#viewer-container:fullscreen .content-item {
+    max-height: 100vh;
+    max-width: 100vw;
+}
+```
+
+**Missing:** Rules for YouTube player container in fullscreen
+
+**Fix - Add to CSS:**
+```css
+/* Fullscreen YouTube player sizing */
+#viewer-container:fullscreen #content-display > div {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100vh !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+#viewer-container:fullscreen #content-display > div > div[id^="youtube-player-"] {
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: 100vw !important;
+    max-height: 100vh !important;
+}
+
+#viewer-container:fullscreen #play-pause-overlay {
+    width: 100vw !important;
+    height: 100vh !important;
+}
+```
+
+**Testing:**
+- Click fullscreen button
+- Verify YouTube video fills entire screen
+- Test play/pause overlay still works
+- Test end-screen overlay still covers everything
+
+---
+
+#### Fix #2: Enable Full YouTube Controls for Creator Mode
+
+**File:** `recursive-creator/components/viewers/SequenceViewer.tsx`
+
+**Current (lines 154-160):**
+```tsx
+playerVars: {
+  rel: 0,
+  modestbranding: 1,
+  enablejsapi: 1,
+  controls: 0,        // Hide all YouTube controls
+  fs: 0,              // Disable YouTube fullscreen
+  iv_load_policy: 3   // Hide annotations
+}
+```
+
+**Fix - Restore Full Controls for Creators:**
+```tsx
+playerVars: {
+  rel: 0,
+  modestbranding: 1,
+  enablejsapi: 1,
+  controls: 1,        // ✅ ENABLE all YouTube controls for creators
+  fs: 1,              // ✅ ENABLE YouTube fullscreen for creators
+  iv_load_policy: 3   // Hide annotations (keep this)
+}
+```
+
+**Also Remove:**
+- Play/pause overlay (lines 257-283) - Not needed with full controls
+- Can keep end-screen overlay for consistency, but make it optional
+
+**Alternative (Cleaner):**
+Remove YouTube Player API entirely from creator mode, go back to simple iframe:
+
+```tsx
+{currentItem.video_id && currentItem.video_id.length === 11 ? (
+  // Simple iframe for creators - full YouTube controls
+  <iframe
+    src={`https://www.youtube-nocookie.com/embed/${currentItem.video_id}?rel=0&modestbranding=1`}
+    title={currentItem.title || `Video ${currentItem.position}`}
+    className="w-full aspect-video rounded-lg"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+    allowFullScreen
+  />
+) : (
+  // Google Drive video (unchanged)
+  <iframe ... />
+)}
+```
+
+**Reasoning:**
+- Creator preview doesn't need locked experience
+- Creators need full YouTube functionality (quality, speed, captions, timeline)
+- Simpler code = fewer bugs
+- Locked experience belongs in PUBLIC viewer (recursive-landing), not creator tool
+
+**Decision:** ✅ Keep Player API, change to `controls=1, fs=1` (Option A chosen by user)
+
+**Implementation:**
+```tsx
+playerVars: {
+  rel: 0,
+  modestbranding: 1,
+  enablejsapi: 1,
+  controls: 1,        // ✅ ENABLE all YouTube controls for creators
+  fs: 1,              // ✅ ENABLE YouTube fullscreen for creators
+  iv_load_policy: 3   // Hide annotations (keep this)
+}
+```
+
+**Also Do:**
+- Remove play/pause overlay (not needed with native controls)
+- Keep end-screen overlay (Replay/Next buttons still useful)
+
+---
+
+#### Enhancement #1: Add Play/Pause Button to recursive-landing
+
+**File:** `recursive-landing/view.html`
+
+**Problem:** Current implementation only has hover overlay - not obvious or accessible
+
+**Solution:** Add always-visible play/pause button below video
+
+**Implementation - Add to Video Display HTML:**
+
+After the YouTube player div, add:
+
+```html
+<!-- Video Controls - Always Visible -->
+<div id="video-controls" style="margin-top: 16px; display: flex; justify-content: center; gap: 12px; align-items: center;">
+  <!-- Play/Pause Button -->
+  <button id="play-pause-btn" style="
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: #9333ea;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  " onmouseover="this.style.background='#7e22ce'" onmouseout="this.style.background='#9333ea'">
+    <svg id="play-icon" style="width: 28px; height: 28px; color: white; margin-left: 3px;" fill="currentColor" viewBox="0 0 24 24">
+      <path d="M8 5v14l11-7z" />
+    </svg>
+    <svg id="pause-icon" style="width: 28px; height: 28px; color: white; display: none;" fill="currentColor" viewBox="0 0 24 24">
+      <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+    </svg>
+  </button>
+
+  <!-- Time Display -->
+  <div id="time-display" style="
+    color: #6b7280;
+    font-size: 14px;
+    font-family: monospace;
+    min-width: 100px;
+    text-align: center;
+  ">
+    0:00 / 0:00
+  </div>
+</div>
+```
+
+**Add Event Listeners in initPlayer():**
+
+```javascript
+// Setup play/pause button
+const playPauseBtn = document.getElementById('play-pause-btn');
+const playIcon = document.getElementById('play-icon');
+const pauseIcon = document.getElementById('pause-icon');
+
+if (playPauseBtn) {
+  playPauseBtn.addEventListener('click', () => {
+    if (!youtubePlayer) return;
+    if (isPlaying) {
+      youtubePlayer.pauseVideo();
+    } else {
+      youtubePlayer.playVideo();
+    }
+  });
+}
+
+// Update time display every second
+setInterval(() => {
+  if (youtubePlayer && youtubePlayer.getCurrentTime) {
+    const current = Math.floor(youtubePlayer.getCurrentTime());
+    const duration = Math.floor(youtubePlayer.getDuration());
+
+    const currentMin = Math.floor(current / 60);
+    const currentSec = (current % 60).toString().padStart(2, '0');
+    const durationMin = Math.floor(duration / 60);
+    const durationSec = (duration % 60).toString().padStart(2, '0');
+
+    const timeDisplay = document.getElementById('time-display');
+    if (timeDisplay) {
+      timeDisplay.textContent = `${currentMin}:${currentSec} / ${durationMin}:${durationSec}`;
+    }
+  }
+}, 1000);
+```
+
+**Update Icon Visibility in onStateChange:**
+
+```javascript
+events: {
+  onStateChange: (event) => {
+    if (event.data === 0) {
+      videoEnded = true;
+      isPlaying = false;
+      document.getElementById('video-overlay').classList.add('active');
+    } else if (event.data === 1) {
+      isPlaying = true;
+      // Show pause icon
+      if (playIcon) playIcon.style.display = 'none';
+      if (pauseIcon) pauseIcon.style.display = 'block';
+    } else if (event.data === 2) {
+      isPlaying = false;
+      // Show play icon
+      if (playIcon) playIcon.style.display = 'block';
+      if (pauseIcon) pauseIcon.style.display = 'none';
+    }
+  }
+}
+```
+
+**Benefits:**
+- ✅ Always visible, no hover needed
+- ✅ Large touch target (56px)
+- ✅ Clear visual feedback (play/pause icons)
+- ✅ Shows current time and duration
+- ✅ Accessible for mobile users
+
+---
+
+#### Fix #5: Overlay Buttons Not Clickable in Fullscreen (CRITICAL)
+
+**File:** `recursive-landing/view.html`
+
+**Root Cause Analysis:**
+
+When browser fullscreen is activated:
+1. The fullscreen element enters the "top layer" (special rendering layer)
+2. Z-index has NO effect in top layer
+3. Only **direct children** of the fullscreen container can receive events
+4. Dynamically inserted elements may not be in the correct DOM position
+
+**Current Structure Problem:**
+
+```javascript
+// displayItem() function creates this structure:
+display.innerHTML = `
+  <div style="position: relative; ...">
+    <div id="youtube-player-${videoId}"></div>
+    <div id="play-pause-overlay">...</div>
+    <div id="video-overlay" class="video-overlay">  // ← End-screen overlay
+      <button id="replay-btn">Replay</button>
+      <button id="next-btn-overlay">Next</button>
+    </div>
+  </div>
+`;
+```
+
+When fullscreen is called on `#viewer-container`, the overlay is nested too deep:
+```
+#viewer-container (fullscreen element)
+  └─ #content-wrapper
+      └─ #content-display
+          └─ <div> (created by innerHTML)
+              └─ #video-overlay (TOO DEEP - events don't reach it!)
+```
+
+**Solution: Restructure DOM for Fullscreen Compatibility**
+
+**Option A (Recommended): Move Overlay Outside Dynamic Content**
+
+Don't create overlay via `innerHTML` - keep it as a persistent sibling:
+
+```html
+<!-- In view.html static HTML -->
+<div id="content-wrapper" class="hidden">
+  <div class="relative content-container">
+    <div id="content-display" class="w-full"></div>
+
+    <!-- Page Indicator (existing) -->
+    <div class="page-indicator">...</div>
+
+    <!-- MOVE OVERLAY HERE - Persistent, not dynamically created -->
+    <div id="video-end-overlay" class="video-overlay" style="display: none; z-index: 9999;">
+      <div style="text-align: center;">
+        <h3 id="overlay-title" style="color: white; font-size: 24px; font-weight: bold; margin-bottom: 8px;">
+          Video Complete
+        </h3>
+        <p style="color: #d1d5db;">What would you like to do next?</p>
+      </div>
+
+      <div style="display: flex; gap: 16px; flex-wrap: wrap; justify-content: center;">
+        <button id="replay-btn-persistent" class="video-overlay-button" style="background: #9333ea; color: white;">
+          <svg style="width: 24px; height: 24px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Replay
+        </button>
+
+        <button id="next-btn-persistent" class="video-overlay-button" style="background: #2563eb; color: white;">
+          Next
+          <svg style="width: 24px; height: 24px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+  <!-- Navigation Controls -->
+  ...
+</div>
+```
+
+**Update displayItem() function:**
+
+```javascript
+} else if (item.type === 'video') {
+  const videoId = item.video_id;
+
+  // Destroy existing player
+  if (youtubePlayer) {
+    youtubePlayer.destroy();
+    youtubePlayer = null;
+  }
+
+  videoEnded = false;
+  isPlaying = false;
+
+  // DON'T include overlay in innerHTML - use persistent one
+  display.innerHTML = `
+    <div style="position: relative; width: 100%; max-width: 900px; margin: 0 auto;">
+      <div id="youtube-player-${videoId}" style="width: 100%; aspect-ratio: 16/9;"></div>
+      ${item.title ? `<div class="mt-4 text-center text-gray-700 text-lg font-semibold">${item.title}</div>` : ''}
+    </div>
+  `;
+
+  // Initialize player...
+  const initPlayer = () => {
+    if (youtubeApiReady && window.YT && window.YT.Player) {
+      try {
+        youtubePlayer = new window.YT.Player(`youtube-player-${videoId}`, {
+          videoId: videoId,
+          playerVars: { /* ... */ },
+          events: {
+            onStateChange: (event) => {
+              if (event.data === 0) {
+                console.log('Video ended, showing overlay');
+                videoEnded = true;
+                isPlaying = false;
+
+                // Update persistent overlay content
+                const overlayTitle = document.getElementById('overlay-title');
+                if (overlayTitle) {
+                  overlayTitle.textContent = item.title || 'Video Complete';
+                }
+
+                // Show persistent overlay
+                const overlay = document.getElementById('video-end-overlay');
+                if (overlay) {
+                  overlay.style.display = 'flex';
+                }
+              }
+            }
+          }
+        });
+      } catch (error) {
+        console.error('Error creating YouTube player:', error);
+      }
+    } else {
+      setTimeout(initPlayer, 100);
+    }
+  };
+
+  setTimeout(initPlayer, 100);
+}
+```
+
+**Setup Event Listeners Once (outside displayItem):**
+
+```javascript
+// At page load, setup persistent overlay buttons
+const replayBtnPersistent = document.getElementById('replay-btn-persistent');
+const nextBtnPersistent = document.getElementById('next-btn-persistent');
+
+if (replayBtnPersistent) {
+  replayBtnPersistent.addEventListener('click', () => {
+    console.log('Replay clicked');
+    if (youtubePlayer) {
+      youtubePlayer.seekTo(0);
+      youtubePlayer.playVideo();
+      videoEnded = false;
+
+      // Hide overlay
+      const overlay = document.getElementById('video-end-overlay');
+      if (overlay) overlay.style.display = 'none';
+    }
+  });
+}
+
+if (nextBtnPersistent) {
+  nextBtnPersistent.addEventListener('click', () => {
+    console.log('Next clicked');
+    videoEnded = false;
+
+    // Hide overlay
+    const overlay = document.getElementById('video-end-overlay');
+    if (overlay) overlay.style.display = 'none';
+
+    // Navigate
+    if (currentIndex < currentItems.length - 1) {
+      goToNext();
+    } else {
+      displayItem(0); // Loop to start
+    }
+  });
+}
+```
+
+**Why This Works:**
+
+✅ Overlay is direct child of `#content-wrapper` (inside fullscreen container)
+✅ Not recreated on every navigation (persistent)
+✅ Event listeners attached once, work in both fullscreen and normal mode
+✅ DOM structure compatible with browser's top layer
+✅ Z-index works correctly (overlay is sibling to content, not nested)
+
+**Testing:**
+- [ ] Normal mode: Overlay appears when video ends
+- [ ] Normal mode: Replay button works
+- [ ] Normal mode: Next button works
+- [ ] **Fullscreen mode: Overlay appears when video ends**
+- [ ] **Fullscreen mode: Replay button is CLICKABLE**
+- [ ] **Fullscreen mode: Next button is CLICKABLE**
+- [ ] Multiple replays: Overlay shows again after replay
+
+---
+
+#### Fix #6: Buttons Don't Show After Replay
+
+**File:** `recursive-landing/view.html`
+
+**Problem:** After clicking Replay once, overlay doesn't appear when video ends again
+
+**Root Cause:**
+
+The replay button handler removes the overlay class but doesn't properly reset state:
+
+```javascript
+// Current code (BUGGY):
+replayBtn.addEventListener('click', () => {
+  youtubePlayer.seekTo(0);
+  youtubePlayer.playVideo();
+  videoEnded = false;
+  document.getElementById('video-overlay').classList.remove('active');
+  // ↑ This removes the class, but what if overlay was recreated?
+});
+```
+
+**Issues:**
+1. Overlay is recreated every time `displayItem()` is called
+2. Old event listeners are lost
+3. Class toggle might not work on newly created element
+4. State (`videoEnded`) and DOM (`classList`) might be out of sync
+
+**Fix (Already solved by Fix #5):**
+
+By using a **persistent overlay** (Fix #5), we:
+- ✅ Don't recreate overlay on navigation
+- ✅ Keep event listeners intact
+- ✅ State and DOM stay in sync
+- ✅ Simple show/hide with `display: flex` / `display: none`
+
+**Verification:**
+```javascript
+// In onStateChange when video ends:
+if (event.data === 0) {
+  videoEnded = true;
+  const overlay = document.getElementById('video-end-overlay');
+  if (overlay) {
+    overlay.style.display = 'flex';  // Show
+    console.log('Overlay shown, videoEnded:', videoEnded);
+  }
+}
+
+// In replay button click:
+replayBtnPersistent.addEventListener('click', () => {
+  videoEnded = false;
+  const overlay = document.getElementById('video-end-overlay');
+  if (overlay) {
+    overlay.style.display = 'none';  // Hide
+    console.log('Overlay hidden, videoEnded:', videoEnded);
+  }
+  youtubePlayer.seekTo(0);
+  youtubePlayer.playVideo();
+});
+```
+
+**Testing:**
+- [ ] Video ends → overlay shows (first time) ✅
+- [ ] Click Replay → overlay hides ✅
+- [ ] Video plays to end again → **overlay shows again** ✅ (was failing before)
+- [ ] Click Replay again → overlay hides ✅
+- [ ] Repeat 5 times → overlay always shows/hides correctly ✅
+
+---
+
+#### Enhancement #2: Add Timeline Scrubbing Controls to recursive-landing
+
+**File:** `recursive-landing/view.html`
+
+**What's Possible with YouTube Player API:**
+
+✅ **Fully Possible:**
+1. Skip forward/backward buttons (±10 seconds)
+2. Custom progress bar with click-to-seek
+3. Display current time / total duration
+4. Keyboard shortcuts (arrow keys to seek)
+
+❌ **Not Recommended:**
+- Full native-style timeline (complex, many edge cases)
+- Thumbnail previews (requires additional API calls)
+
+**Recommended Implementation: Simple Skip Buttons**
+
+**Add to Video Controls HTML (after play/pause button):**
+
+```html
+<!-- Skip Backward Button -->
+<button id="skip-backward-btn" style="
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #4b5563;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+" onmouseover="this.style.background='#374151'" onmouseout="this.style.background='#4b5563'">
+  <svg style="width: 24px; height: 24px; color: white;" fill="currentColor" viewBox="0 0 24 24">
+    <path d="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z"/>
+  </svg>
+  <text style="position: absolute; font-size: 10px; color: white; font-weight: bold; margin-top: 2px;">10</text>
+</button>
+
+<!-- Play/Pause (already exists) -->
+
+<!-- Skip Forward Button -->
+<button id="skip-forward-btn" style="
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #4b5563;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+" onmouseover="this.style.background='#374151'" onmouseout="this.style.background='#4b5563'">
+  <svg style="width: 24px; height: 24px; color: white;" fill="currentColor" viewBox="0 0 24 24">
+    <path d="M13 6v12l8.5-6L13 6zM4 18l8.5-6L4 6v12z"/>
+  </svg>
+  <text style="position: absolute; font-size: 10px; color: white; font-weight: bold; margin-top: 2px;">10</text>
+</button>
+```
+
+**Add Event Listeners:**
+
+```javascript
+// Skip backward 10 seconds
+const skipBackwardBtn = document.getElementById('skip-backward-btn');
+if (skipBackwardBtn) {
+  skipBackwardBtn.addEventListener('click', () => {
+    if (!youtubePlayer) return;
+    const currentTime = youtubePlayer.getCurrentTime();
+    youtubePlayer.seekTo(Math.max(0, currentTime - 10), true);
+  });
+}
+
+// Skip forward 10 seconds
+const skipForwardBtn = document.getElementById('skip-forward-btn');
+if (skipForwardBtn) {
+  skipForwardBtn.addEventListener('click', () => {
+    if (!youtubePlayer) return;
+    const currentTime = youtubePlayer.getCurrentTime();
+    const duration = youtubePlayer.getDuration();
+    youtubePlayer.seekTo(Math.min(duration, currentTime + 10), true);
+  });
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (!youtubePlayer) return;
+
+  // Left arrow = -10 seconds
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    const currentTime = youtubePlayer.getCurrentTime();
+    youtubePlayer.seekTo(Math.max(0, currentTime - 10), true);
+  }
+
+  // Right arrow = +10 seconds
+  if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    const currentTime = youtubePlayer.getCurrentTime();
+    const duration = youtubePlayer.getDuration();
+    youtubePlayer.seekTo(Math.min(duration, currentTime + 10), true);
+  }
+
+  // Spacebar = play/pause
+  if (e.key === ' ' || e.key === 'Spacebar') {
+    e.preventDefault();
+    if (isPlaying) {
+      youtubePlayer.pauseVideo();
+    } else {
+      youtubePlayer.playVideo();
+    }
+  }
+});
+```
+
+**Optional: Custom Progress Bar (More Advanced)**
+
+If you want a clickable progress bar:
+
+```html
+<!-- Progress Bar -->
+<div id="progress-container" style="
+  width: 100%;
+  max-width: 600px;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: 12px;
+  position: relative;
+">
+  <div id="progress-bar" style="
+    height: 100%;
+    background: #9333ea;
+    border-radius: 4px;
+    width: 0%;
+    transition: width 0.1s linear;
+  "></div>
+</div>
+```
+
+```javascript
+// Update progress bar every 100ms
+setInterval(() => {
+  if (youtubePlayer && youtubePlayer.getCurrentTime) {
+    const current = youtubePlayer.getCurrentTime();
+    const duration = youtubePlayer.getDuration();
+    const percentage = (current / duration) * 100;
+
+    const progressBar = document.getElementById('progress-bar');
+    if (progressBar) {
+      progressBar.style.width = percentage + '%';
+    }
+  }
+}, 100);
+
+// Click to seek
+const progressContainer = document.getElementById('progress-container');
+if (progressContainer) {
+  progressContainer.addEventListener('click', (e) => {
+    if (!youtubePlayer) return;
+
+    const rect = progressContainer.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const percentage = clickX / rect.width;
+    const duration = youtubePlayer.getDuration();
+    const seekTime = duration * percentage;
+
+    youtubePlayer.seekTo(seekTime, true);
+  });
+}
+```
+
+**Benefits:**
+- ✅ Simple skip buttons (easy to implement, works great)
+- ✅ Keyboard shortcuts for power users
+- ✅ Optional progress bar for visual feedback
+- ✅ All controls accessible on mobile
+- ✅ No complex timeline logic needed
+
+**Testing After Implementation:**
+- [ ] Click skip buttons → video jumps 10 seconds
+- [ ] Press arrow keys → video seeks
+- [ ] Press spacebar → video plays/pauses
+- [ ] Click progress bar → video seeks to that position
+- [ ] Time display updates every second
+
+---
+
+#### Fix #3: Content Area Bottom Cut-Off
+
+**Files:** Both `SequenceViewer.tsx` and `view.html`
+
+**Investigation Steps:**
+1. Inspect container heights in browser dev tools
+2. Check if page indicators or controls are overlapping content
+3. Verify padding/margin settings
+4. Test with different aspect ratios (images vs videos)
+
+**Possible Causes:**
+- Viewer container height calculation
+- Page indicator positioning (absolute bottom)
+- Control buttons overlapping content
+- Content-container min-height too small
+
+**Fix Location (SequenceViewer.tsx:214-383):**
+Check main container structure and CSS classes
+
+**Fix Location (view.html:66-75, 106-117):**
+Check content-container and page-indicator CSS
+
+**Once Root Cause Found:**
+- Adjust container height
+- Or adjust page indicator bottom position
+- Or add padding-bottom to content area
+- Ensure no overlapping elements
+
+---
+
+#### Fix #4: Restore Fullscreen Button in recursive-creator
+
+**File:** `recursive-creator/components/viewers/SequenceViewer.tsx`
+
+**Current Location (lines 385-408):**
+```tsx
+{/* Controls Overlay - bottom */}
+<div className="absolute bottom-0 left-0 right-0 p-6 flex items-center justify-between pointer-events-none">
+  {/* Page Counter */}
+  <div className="bg-black/70 text-white px-4 py-2 rounded-full text-sm backdrop-blur-sm pointer-events-auto">
+    {currentIndex + 1} / {items.length}
+  </div>
+
+  {/* Fullscreen Button - Large touch target */}
+  <button
+    onClick={toggleFullscreen}
+    className="pointer-events-auto w-14 h-14 bg-black/70 hover:bg-black/80 backdrop-blur-sm rounded-full flex items-center justify-center transition-all"
+    aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+  >
+    {/* SVG icons */}
+  </button>
+</div>
+```
+
+**Problem:** This code exists but button not showing - why?
+
+**Investigation:**
+1. Check if element is being rendered (React DevTools)
+2. Check CSS - is it hidden by another element?
+3. Check z-index conflicts
+4. Check if parent container has `overflow: hidden`
+5. Check if `pointer-events-none` on parent is causing issues
+
+**Possible Fixes:**
+- Increase z-index on controls overlay
+- Remove `overflow: hidden` from parent containers
+- Ensure button is outside any clipping containers
+- Add explicit `z-index: 50` to controls div
+
+**Quick Fix to Try:**
+```tsx
+{/* Controls Overlay - bottom */}
+<div className="absolute bottom-0 left-0 right-0 p-6 flex items-center justify-between z-50">
+  {/* Ensure z-index higher than video player */}
+```
+
+---
+
+### Testing Checklist After Fixes
+
+**recursive-landing (view.html):**
+- [ ] Fullscreen mode: YouTube video fills entire screen
+- [ ] Fullscreen mode: Play/pause overlay works
+- [ ] Fullscreen mode: End-screen overlay covers everything
+- [ ] Normal mode: Content not cut off at bottom
+- [ ] Normal mode: All controls visible
+
+**recursive-creator (SequenceViewer.tsx):**
+- [ ] Fullscreen button visible and working
+- [ ] YouTube controls visible and functional (quality, speed, timeline)
+- [ ] YouTube fullscreen button works
+- [ ] Content not cut off at bottom
+- [ ] Can scrub through video timeline
+- [ ] Can adjust playback speed
+- [ ] Can toggle captions
+
+**Both:**
+- [ ] Navigation arrows work
+- [ ] Keyboard navigation works
+- [ ] Swipe navigation works (mobile)
+- [ ] Page counter displays correctly
+
+---
+
+## Phase 11D: User Testing Results & New Issues (2025-11-20)
+
+**Testing Date:** 2025-11-20
+**Tested URL:** https://dev.recursive.eco/view/f86b11e2-718a-4499-b533-8fa9b2db74eb
+
+### ✅ SUCCESSES - recursive-landing
+
+**Critical Fixes Working:**
+- ✅ **Thumbnails NOT appearing** - End-screen overlay successfully blocks YouTube suggested videos!
+- ✅ **Buttons working in fullscreen** - Replay and Next buttons are clickable in fullscreen mode!
+- ✅ **Persistent overlay working** - Fixes #5 and #6 confirmed successful
+
+**User Quote:** "Good news! Thumbnails are not appearing and the buttons are working on fullscreen!"
+
+---
+
+### 🐛 NEW ISSUES FOUND
+
+**Issue #7: YouTube Logo Link Visible in recursive-landing** 🔴 HIGH PRIORITY
+- **Problem:** YouTube logo and link are visible in the player
+- **User Report:** "The Youtube logo and link is available, so that when one clicks it opens the video on Youtube in a new page... Can we make even that not appear?"
+- **Impact:** Breaks "bounded experience" - users can escape to YouTube
+- **Root Cause:** `modestbranding=1` only minimizes branding, doesn't remove it completely
+- **File:** `recursive-landing/view.html`
+- **Solution:** Add `modestbranding=1` is already there, but YouTube logo still appears with controls=0. Need to investigate if there's a way to hide it or if it's a YouTube policy requirement.
+
+**Issue #8: Fullscreen Button Still Not Visible in recursive-creator** 🔴 CRITICAL
+- **Problem:** Fullscreen button not appearing despite z-50 fix
+- **User Report:** "Is there a coded full screen button on the react? i still dont see it and I did not see any changes on how it is rendered"
+- **File:** `recursive-creator/components/viewers/SequenceViewer.tsx`
+- **Deployed Commit:** 311856a added z-50
+- **Possible Causes:**
+  1. Build/deployment issue - changes not deployed to preview?
+  2. Z-index conflict with other elements
+  3. Parent container clipping the controls
+  4. CSS class not applying correctly
+- **Debug Steps:**
+  1. Verify deployment has latest code
+  2. Inspect element in browser DevTools
+  3. Check if element exists in DOM
+  4. Check computed styles (z-index, visibility, opacity)
+  5. Check parent container overflow/clipping
+
+**Issue #9: YouTube Shorts URLs Incorrectly Converted to Drive URLs** 🔴 HIGH PRIORITY
+- **Problem:** YouTube Shorts URLs are being treated as Drive URLs
+- **User Report:**
+  - Initial link: `https://youtube.com/shorts/FTxe-Nl9BLA`
+  - Final (wrong): `https://drive.google.com/file/d/https://youtube.com/shorts/FTxe-Nl9BLA/view`
+- **Impact:** Video doesn't render, creator experience broken
+- **Root Cause:** URL parsing logic incorrectly identifying Shorts URLs
+- **File:** `recursive-creator/app/dashboard/sequences/new/page.tsx` (bulk URL processing)
+- **Fix Needed:** Add YouTube Shorts detection to URL validation/parsing
+
+---
+
+### Console Errors (Non-Critical)
+
+**Expected/Benign Errors:**
+- ✅ `postMessage` origin mismatch (YouTube API normal behavior)
+- ✅ Grammarly extension violations (browser extension, not our code)
+- ✅ CORS errors from Google ads (expected, YouTube tracking blocked)
+- ✅ Missing favicon (cosmetic)
+- ✅ Spiral functions not found (site-shell component, doesn't affect viewer)
+
+**Action:** No fixes needed for console errors - all are expected or third-party
+
+---
+
+### Phase 11E: Additional Fixes Needed
+
+**Priority Order:**
+1. **Fix #8** - DEBUG fullscreen button visibility (CRITICAL - 30 min investigation)
+2. **Fix #9** - Fix YouTube Shorts URL parsing (HIGH - 20 min)
+3. **Fix #7** - Hide/minimize YouTube logo (HIGH - 30 min investigation)
+
+---
+
+#### Fix #7: Hide YouTube Logo Link
+
+**File:** `recursive-landing/view.html`
+
+**Current Parameters:**
+```javascript
+playerVars: {
+  rel: 0,
+  modestbranding: 1,  // ← Already set, but logo still appears
+  enablejsapi: 1,
+  controls: 0,
+  fs: 0,
+  iv_load_policy: 3
+}
+```
+
+**Research Needed:**
+According to YouTube documentation, `modestbranding=1` only *minimizes* the YouTube logo, it doesn't remove it completely. YouTube's terms of service may require logo visibility.
+
+**Possible Solutions:**
+
+**Option A: CSS Overlay to Hide Logo**
+```css
+/* Add to <style> section */
+#viewer-container iframe[src*="youtube"] {
+  /* YouTube logo typically in top-right corner */
+}
+
+/* May need to add overlay div covering logo area */
+```
+
+**Option B: Accept YouTube Logo (ToS Compliance)**
+- YouTube's ToS may require logo visibility
+- Check official documentation
+- If required, explain to user that logo must stay for compliance
+
+**Option C: Increase Player Size to Push Logo Out**
+- Make player larger than container
+- Use `overflow: hidden` to clip logo area
+- Risky - may violate ToS
+
+**Investigation Steps:**
+1. Check YouTube IFrame API ToS for logo requirements
+2. Test CSS-based hiding (if allowed)
+3. Document findings and recommend compliant solution
+
+**Decision Needed:** Check if hiding YouTube logo violates ToS before implementing
+
+---
+
+#### Fix #8: Debug Fullscreen Button Not Visible
+
+**File:** `recursive-creator/components/viewers/SequenceViewer.tsx`
+
+**Code That Should Be Working (Line 386):**
+```tsx
+<div className="absolute bottom-0 left-0 right-0 p-6 flex items-center justify-between pointer-events-none z-50">
+  <div className="bg-black/70 text-white px-4 py-2 rounded-full text-sm backdrop-blur-sm pointer-events-auto">
+    {currentIndex + 1} / {items.length}
+  </div>
+
+  <button
+    onClick={toggleFullscreen}
+    className="pointer-events-auto w-14 h-14 bg-black/70 hover:bg-black/80 backdrop-blur-sm rounded-full flex items-center justify-center transition-all"
+    aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+  >
+    {/* SVG icons */}
+  </button>
+</div>
+```
+
+**Debug Checklist:**
+
+1. **Verify Deployment**
+   ```bash
+   # Check latest commit on preview URL
+   # Should show commit 311856a
+   ```
+
+2. **Browser DevTools Inspection**
+   - Open browser inspector
+   - Find element with class "absolute bottom-0 left-0 right-0"
+   - Check if it exists in DOM
+   - Check computed styles:
+     - `z-index: 50` applied?
+     - `display: flex` applied?
+     - `visibility: visible`?
+     - `opacity: 1`?
+
+3. **Check Parent Container**
+   - Look for parent with `overflow: hidden`
+   - Check if parent has lower z-index
+   - Verify positioning context
+
+4. **Possible Fixes:**
+
+**Fix A: Increase Z-Index Further**
+```tsx
+<div className="absolute bottom-0 left-0 right-0 p-6 flex items-center justify-between pointer-events-none z-[100]">
+```
+
+**Fix B: Remove Pointer Events None from Parent**
+```tsx
+<div className="absolute bottom-0 left-0 right-0 p-6 flex items-center justify-between z-50">
+  {/* Remove pointer-events-none, add to individual children */}
+```
+
+**Fix C: Move Outside Flex Container**
+Check if parent flex container is causing issues - may need to restructure DOM
+
+**Fix D: Add Important Flag**
+```tsx
+<div className="absolute bottom-0 left-0 right-0 p-6 flex items-center justify-between !z-50">
+```
+
+---
+
+#### Fix #9: YouTube Shorts URL Parsing
+
+**File:** `recursive-creator/app/dashboard/sequences/new/page.tsx`
+
+**Problem:** YouTube Shorts URLs being treated as Drive URLs
+
+**Current URL Patterns Supported:**
+```typescript
+// From extractYouTubeId function
+const patterns = [
+  /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/,
+  /^([a-zA-Z0-9_-]{11})$/  // Direct video ID
+];
+```
+
+**Missing Pattern:** YouTube Shorts
+```
+https://youtube.com/shorts/VIDEO_ID
+https://www.youtube.com/shorts/VIDEO_ID
+```
+
+**Fix:**
+
+**Step 1: Update extractYouTubeId function**
+```typescript
+function extractYouTubeId(url: string): string | null {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/,
+    /youtube\.com\/shorts\/([^&\n?#]+)/,  // ← ADD THIS
+    /^([a-zA-Z0-9_-]{11})$/
+  ];
+
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match && match[1]) {
+      return match[1];
+    }
+  }
+  return null;
+}
+```
+
+**Step 2: Update Bulk URL Processing**
+
+Find where URLs are being parsed (likely in handleBulkAdd or similar):
+
+```typescript
+// Current logic (WRONG):
+if (url.includes('drive.google.com')) {
+  // Process as Drive URL
+} else if (url.includes('youtube.com') || url.includes('youtu.be')) {
+  // Process as YouTube
+}
+
+// Updated logic (CORRECT):
+const youtubeId = extractYouTubeId(url);
+if (youtubeId) {
+  // It's a YouTube video (includes Shorts)
+  addVideoItem(youtubeId);
+} else if (url.includes('drive.google.com')) {
+  // It's a Drive URL
+  addDriveItem(url);
+}
+```
+
+**Step 3: Test with All YouTube URL Formats**
+- Regular: `https://youtube.com/watch?v=VIDEO_ID`
+- Short: `https://youtu.be/VIDEO_ID`
+- Shorts: `https://youtube.com/shorts/VIDEO_ID`
+- Mobile: `https://m.youtube.com/watch?v=VIDEO_ID`
+- Direct ID: `VIDEO_ID` (11 characters)
+
+**Testing:**
+- [ ] Paste Shorts URL → extracted as YouTube video
+- [ ] Video renders correctly (Shorts are just regular videos with different UI on YouTube)
+- [ ] Drive URLs still work correctly
+- [ ] Regular YouTube URLs still work
+
+---
+
+### Updated Priority Order (All Fixes)
+
+**CRITICAL (Do First):**
+1. **Fix #8** - Debug fullscreen button visibility (30 min)
+2. **Fix #9** - Fix YouTube Shorts URL parsing (20 min)
+
+**HIGH PRIORITY:**
+3. **Fix #7** - Investigate YouTube logo hiding (30 min + ToS check)
+
+**ENHANCEMENTS (After Critical Fixes):**
+4. Enhancement #1 - Add play/pause button to recursive-landing
+5. Enhancement #2 - Add timeline scrubbing controls
+6. Fix #1 - Fix fullscreen YouTube sizing
+7. Fix #3 - Fix content area bottom cut-off
+
+---
+
+### Success Metrics
+
+**recursive-landing:**
+- ✅ Thumbnails hidden at video end
+- ✅ Replay/Next buttons work in fullscreen
+- ⏳ YouTube logo hidden (pending ToS research)
+
+**recursive-creator:**
+- ⏳ Fullscreen button visible and working
+- ✅ Full YouTube controls available
+- ⏳ YouTube Shorts URLs parse correctly
 
 ---
 
