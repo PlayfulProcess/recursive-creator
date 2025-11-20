@@ -247,7 +247,7 @@ export default function SequenceViewer({
 
                   {/* Custom overlay when video ends */}
                   {videoEnded && (
-                    <div className="absolute inset-0 bg-black/90 rounded-lg flex flex-col items-center justify-center gap-6 z-10">
+                    <div className="absolute inset-0 bg-black rounded-lg flex flex-col items-center justify-center gap-6 z-10">
                       <div className="text-center">
                         <h3 className="text-white text-2xl font-bold mb-2">
                           {currentItem.title || 'Video Complete'}
@@ -273,37 +273,23 @@ export default function SequenceViewer({
                           Replay
                         </button>
 
-                        {/* Next Item Button (if not last) */}
-                        {currentIndex < items.length - 1 && (
-                          <button
-                            onClick={() => {
-                              setVideoEnded(false);
+                        {/* Next Button */}
+                        <button
+                          onClick={() => {
+                            setVideoEnded(false);
+                            if (currentIndex < items.length - 1) {
                               goToNext();
-                            }}
-                            className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold flex items-center justify-center gap-2 transition-all min-w-[160px]"
-                          >
-                            Next Item
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                          </button>
-                        )}
-
-                        {/* Back to Start Button (if last item) */}
-                        {currentIndex === items.length - 1 && (
-                          <button
-                            onClick={() => {
-                              setVideoEnded(false);
+                            } else {
                               setCurrentIndex(0);
-                            }}
-                            className="px-8 py-4 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold flex items-center justify-center gap-2 transition-all min-w-[160px]"
-                          >
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                            </svg>
-                            Back to Start
-                          </button>
-                        )}
+                            }
+                          }}
+                          className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold flex items-center justify-center gap-2 transition-all min-w-[160px]"
+                        >
+                          Next
+                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
                       </div>
                     </div>
                   )}
