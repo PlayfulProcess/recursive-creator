@@ -444,9 +444,11 @@ function NewSequencePageContent() {
 
         if (shouldPublish) {
           setPublishedUrl(`https://recursive.eco/view/${editingId}`);
+          setPublishedDocId(editingId);
           setIsPublished(true);
         } else {
           setPublishedUrl(null);
+          setPublishedDocId(null);
           setIsPublished(false);
         }
 
