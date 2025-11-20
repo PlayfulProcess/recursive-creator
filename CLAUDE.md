@@ -1925,6 +1925,14 @@ git push origin main
 1. ✅ Update about.html with licensing section
 2. ✅ Add license checkbox to creator dashboard
 
+#### USer comments on revisions:
+There is just one thing missing here. I tested the workflow again and the recursive creator submission is actually submitting to the wellness channels. I think we just need to change the way the URL is being built.
+
+Right now, it is: https://channels.recursive.eco/?doc_id=f37a5678-aeaf-46f3-81a0-7a90d5e59455&channel=kids-stories
+
+I think it need to start with this for Supabase to recognize the right channel when publishing, what do you think?
+https://channels.recursive.eco/channels/kids-stories
+
 **Phase 8.2: Submit to Community Button** 🔄 NEXT (Test workflow FIRST)
 3. ⏳ Add "Submit to Community" success modal in creator
 4. ⏳ Verify channels submit form accepts query params
@@ -2291,6 +2299,418 @@ ALTER TABLE profiles ADD COLUMN total_reports_received INTEGER DEFAULT 0;
 - ✅ Email-based workflow (simple, no new UI needed)
 
 **When to implement:** After Phase 8 is complete and community features are active
+
+---
+
+## Phase 11: YouTube End-Screen Overlay (Hide Suggested Videos)
+
+**Date:** 2025-11-20
+**Status:** Planning
+**Goal:** Prevent YouTube suggested videos thumbnails from appearing at video end
+**Priority:** HIGH (improves "safer for kids" value proposition)
+
+---
+
+### Problem Statement
+
+**Current Issue:**
+- YouTube's `rel=0` parameter NO LONGER works (deprecated since 2018)
+- End-screen shows related videos from other channels (can't be fully hidden)
+- Defeats our "safer for kids" and "bounded experience" goals
+- Users might click away to random YouTube content
+
+**User Request:**
+> "Can you help me prevent the showcase of additional thumbnails at the end of youtube videos? rel=0 does no longer do that."
+
+**Suggested Solution:**
+Use `enablejsapi=1` with YouTube IFrame Player API to:
+1. Detect when video ends (`onStateChange` event)
+2. Overlay custom UI (replay button, next item button, or static image)
+3. Cover the suggested videos completely
+
+---
+
+### Current Implementation
+
+**File:** `components/viewers/SequenceViewer.tsx:150-156`
+
+```tsx
+<iframe
+  src={`https://www.youtube-nocookie.com/embed/${currentItem.video_id}?rel=0&modestbranding=1`}
+  title={currentItem.title || `Video ${currentItem.position}`}
+  className="w-full aspect-video rounded-lg"
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+  allowFullScreen
+/>
+```
+
+**Current Parameters:**
+- ✅ `youtube-nocookie.com` - Privacy-enhanced mode
+- ✅ `rel=0` - Attempts to hide related videos (NO LONGER WORKS)
+- ✅ `modestbranding=1` - Minimal YouTube branding
+
+---
+
+### Proposed Solution: YouTube IFrame Player API Integration
+
+#### **Step 1: Load YouTube IFrame API**
+
+Add to `components/viewers/SequenceViewer.tsx`:
+
+```tsx
+// Add to component imports
+import Script from 'next/script';
+
+// Add state for player
+const [youtubePlayer, setYoutubePlayer] = useState<any>(null);
+const [videoEnded, setVideoEnded] = useState(false);
+const playerRef = useRef<any>(null);
+
+// Add effect to initialize player when API loads
+useEffect(() => {
+  // Make onYouTubeIframeAPIReady available globally
+  (window as any).onYouTubeIframeAPIReady = () => {
+    console.log('YouTube IFrame API ready');
+  };
+}, []);
+
+// Add effect to create player when video changes
+useEffect(() => {
+  if (currentItem.type === 'video' && currentItem.video_id && currentItem.video_id.length === 11) {
+    // Reset video ended state when changing videos
+    setVideoEnded(false);
+
+    // Wait for API to be ready, then create player
+    if ((window as any).YT && (window as any).YT.Player) {
+      const player = new (window as any).YT.Player(`youtube-player-${currentItem.video_id}`, {
+        videoId: currentItem.video_id,
+        playerVars: {
+          rel: 0,
+          modestbranding: 1,
+          enablejsapi: 1
+        },
+        events: {
+          onStateChange: (event: any) => {
+            // YT.PlayerState.ENDED = 0
+            if (event.data === 0) {
+              setVideoEnded(true);
+            }
+          }
+        }
+      });
+
+      setYoutubePlayer(player);
+      playerRef.current = player;
+    }
+  }
+
+  // Cleanup player on unmount or item change
+  return () => {
+    if (playerRef.current) {
+      playerRef.current.destroy();
+      playerRef.current = null;
+    }
+  };
+}, [currentItem]);
+```
+
+#### **Step 2: Update YouTube Embed Structure**
+
+Replace iframe with div for YouTube Player API:
+
+```tsx
+{currentItem.type === 'video' && (
+  <div className="w-full h-full flex items-center justify-center p-4 relative">
+    <div className="w-full max-w-4xl relative">
+      {currentItem.video_id && currentItem.video_id.length === 11 ? (
+        // YouTube video with Player API
+        <>
+          <div
+            id={`youtube-player-${currentItem.video_id}`}
+            className="w-full aspect-video rounded-lg"
+          />
+
+          {/* Custom overlay when video ends */}
+          {videoEnded && (
+            <div className="absolute inset-0 bg-black/90 rounded-lg flex flex-col items-center justify-center gap-6 z-10">
+              <div className="text-center">
+                <h3 className="text-white text-2xl font-bold mb-2">
+                  {currentItem.title || 'Video Complete'}
+                </h3>
+                <p className="text-gray-300">
+                  What would you like to do next?
+                </p>
+              </div>
+
+              <div className="flex gap-4">
+                {/* Replay Button */}
+                <button
+                  onClick={() => {
+                    playerRef.current?.seekTo(0);
+                    playerRef.current?.playVideo();
+                    setVideoEnded(false);
+                  }}
+                  className="px-8 py-4 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold flex items-center gap-2 transition-all"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Replay
+                </button>
+
+                {/* Next Item Button (if not last) */}
+                {currentIndex < items.length - 1 && (
+                  <button
+                    onClick={() => {
+                      setVideoEnded(false);
+                      goToNext();
+                    }}
+                    className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold flex items-center gap-2 transition-all"
+                  >
+                    Next Item
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                )}
+
+                {/* Back to Start Button (if last item) */}
+                {currentIndex === items.length - 1 && (
+                  <button
+                    onClick={() => {
+                      setVideoEnded(false);
+                      setCurrentIndex(0);
+                    }}
+                    className="px-8 py-4 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold flex items-center gap-2 transition-all"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                    </svg>
+                    Back to Start
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        // Google Drive video (unchanged)
+        <iframe
+          src={`https://drive.google.com/file/d/${currentItem.video_id}/preview`}
+          title={currentItem.title || `Video ${currentItem.position}`}
+          className="w-full aspect-video rounded-lg"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+        />
+      )}
+    </div>
+
+    {/* Video title overlay (keep existing) */}
+    {currentItem.title && !videoEnded && (
+      <div className="absolute bottom-8 left-0 right-0 text-center pointer-events-none">
+        <p className="text-white text-lg px-6 py-3 bg-black/50 rounded-lg backdrop-blur-sm inline-block">
+          {currentItem.title}
+        </p>
+      </div>
+    )}
+  </div>
+)}
+```
+
+#### **Step 3: Add YouTube API Script Tag**
+
+Add to the component return (before the main div):
+
+```tsx
+return (
+  <>
+    {/* Load YouTube IFrame API */}
+    <Script
+      src="https://www.youtube.com/iframe_api"
+      strategy="afterInteractive"
+      onLoad={() => {
+        console.log('YouTube API script loaded');
+      }}
+    />
+
+    <div
+      ref={containerRef}
+      className="relative w-full h-screen bg-black flex flex-col"
+      // ... rest of component
+    >
+```
+
+---
+
+### Implementation Checklist
+
+**Phase 11.1: Basic Integration**
+- [ ] Add YouTube IFrame API script tag with Next.js `<Script>`
+- [ ] Add state management for player and video end detection
+- [ ] Replace YouTube iframe with API-controlled div
+- [ ] Initialize YouTube Player with `enablejsapi=1`
+- [ ] Add `onStateChange` event listener for video end (state = 0)
+
+**Phase 11.2: Custom End-Screen Overlay**
+- [ ] Create overlay component (dark background with controls)
+- [ ] Add "Replay" button (seeks to 0, plays video)
+- [ ] Add "Next Item" button (navigates to next, if exists)
+- [ ] Add "Back to Start" button (goes to first item, if at end)
+- [ ] Style overlay to match existing dark mode design
+
+**Phase 11.3: Edge Cases & Polish**
+- [ ] Handle manual navigation away from ended video (reset `videoEnded` state)
+- [ ] Handle fullscreen mode (overlay should work in fullscreen too)
+- [ ] Test with playlists that mix images and videos
+- [ ] Test swipe navigation while overlay is showing
+- [ ] Ensure keyboard navigation still works
+
+**Phase 11.4: Testing**
+- [ ] Test on mobile (touch targets large enough?)
+- [ ] Test on desktop (hover states work?)
+- [ ] Test with sequences of all videos
+- [ ] Test with mixed sequences (images + videos)
+- [ ] Test in fullscreen mode
+- [ ] Verify suggested videos are completely hidden
+
+---
+
+### Technical Details
+
+**YouTube Player States:**
+- `-1` (unstarted)
+- `0` (ended) ← **This is what we detect**
+- `1` (playing)
+- `2` (paused)
+- `3` (buffering)
+- `5` (video cued)
+
+**API Documentation:**
+- [YouTube IFrame Player API](https://developers.google.com/youtube/iframe_api_reference)
+- [Player Parameters](https://developers.google.com/youtube/player_parameters)
+- [Events Reference](https://developers.google.com/youtube/iframe_api_reference#Events)
+
+**Key Parameters:**
+- `enablejsapi=1` - Enable API control
+- `rel=0` - Still include (limits related videos to same channel)
+- `modestbranding=1` - Minimal YouTube branding
+
+**Why This Works:**
+- ✅ Overlay covers the entire iframe when video ends
+- ✅ `z-index: 10` ensures overlay is on top
+- ✅ User can't see or click suggested videos
+- ✅ Maintains "bounded experience" goal
+- ✅ Provides clear next actions (replay, next, or restart)
+
+---
+
+### Benefits
+
+**For Parents (Safety):**
+- ✅ Kids can't click random suggested videos
+- ✅ Bounded experience - stays within your curated content
+- ✅ Clear navigation options at video end
+
+**For Creators (Control):**
+- ✅ Your playlists stay cohesive
+- ✅ Viewers engage with YOUR sequence, not YouTube's suggestions
+- ✅ Professional, polished UX
+
+**For Platform (Value Prop):**
+- ✅ Strengthens "safer for kids" positioning
+- ✅ Differentiates from raw YouTube embeds
+- ✅ Aligns with "narrative context" goal (you control the flow)
+
+---
+
+### Alternative Approaches (Considered & Rejected)
+
+**Option A: CSS-only overlay**
+- ❌ Can't detect video end without API
+- ❌ Timing would be manual and unreliable
+
+**Option B: Custom video player (not YouTube)**
+- ❌ Massive complexity increase
+- ❌ Violates YouTube ToS (can't download videos)
+- ❌ Loses YouTube features (quality switching, captions, etc.)
+
+**Option C: Just accept suggested videos**
+- ❌ Defeats "safer for kids" goal
+- ❌ Undermines platform value proposition
+- ❌ User explicitly requested this feature
+
+**Option D (CHOSEN): YouTube IFrame Player API**
+- ✅ Official YouTube API
+- ✅ Detects video end reliably
+- ✅ Allows custom overlay
+- ✅ Maintains YouTube features
+- ✅ 2-3 hours implementation time
+
+---
+
+### Estimated Time
+
+**Total:** 3-4 hours
+
+**Breakdown:**
+- 1 hour: API integration + player initialization
+- 1 hour: Custom overlay UI + button logic
+- 1 hour: Testing edge cases (navigation, fullscreen, etc.)
+- 30 min: Polish and refinement
+
+---
+
+### Priority Justification
+
+**Why HIGH Priority:**
+1. User explicitly requested this feature
+2. Directly supports "safer for kids" value proposition
+3. YouTube removed `rel=0` functionality - we need a replacement
+4. Differentiates our platform from basic YouTube embeds
+5. Relatively quick implementation (3-4 hours)
+
+**When to Implement:**
+- Can be done in parallel with Phase 8 (publishing workflow)
+- OR immediately after Phase 8.1 (legal foundation) is complete
+- Does not depend on other features
+
+---
+
+### Next Steps
+
+**Branch Strategy:**
+- Working on existing branch: `dev/feature/publishing-workflow` (across all projects)
+- Switch to this branch in both recursive-creator AND recursive-landing
+- Implement YouTube fix in both places
+
+**Implementation Order:**
+
+**Phase 11A: Fix in recursive-creator (React viewer)**
+1. Switch to `dev/feature/publishing-workflow` branch
+2. Implement Phase 11.1 (basic API integration) in `SequenceViewer.tsx`
+3. Implement Phase 11.2 (custom overlay) in React
+4. Test thoroughly (Phase 11.3-11.4)
+
+**Phase 11B: Fix in recursive-landing (Vanilla JS viewer)**
+1. Switch recursive-landing to `dev/feature/publishing-workflow` branch
+2. Implement same logic in `pages/content/viewer.html` (vanilla JS)
+3. Simpler implementation (no React boilerplate)
+4. Test to ensure iframe embedding still works from creator
+
+**Phase 11C: Testing & Deployment**
+1. Test both viewers independently
+2. Test creator → landing iframe integration
+3. Deploy to dev for user testing
+4. Merge to main once validated
+
+**User Testing Questions:**
+- Does the overlay completely hide suggested videos?
+- Are the buttons easy to tap on mobile?
+- Does it feel natural in the sequence viewing flow?
+- Any edge cases where overlay doesn't appear?
+- Does iframe embedding still work correctly?
+
+**Note:** Vanilla JS implementation in recursive-landing will be simpler and more direct than React version. Both will use the same YouTube IFrame Player API core logic.
 
 ---
 
