@@ -239,15 +239,15 @@ export default function SequenceViewer({
             <div className="w-full max-w-4xl relative">
               {currentItem.video_id && currentItem.video_id.length === 11 ? (
                 // YouTube video with Player API
-                <>
+                <div className="relative w-full aspect-video rounded-lg">
                   <div
                     id={`youtube-player-${currentItem.video_id}`}
-                    className="w-full aspect-video rounded-lg"
+                    className="w-full h-full rounded-lg"
                   />
 
                   {/* Custom overlay when video ends */}
                   {videoEnded && (
-                    <div className="absolute inset-0 bg-black rounded-lg flex flex-col items-center justify-center gap-6 z-10">
+                    <div className="absolute inset-0 bg-black rounded-lg flex flex-col items-center justify-center gap-6 z-[9999]">
                       <div className="text-center">
                         <h3 className="text-white text-2xl font-bold mb-2">
                           {currentItem.title || 'Video Complete'}
@@ -293,7 +293,7 @@ export default function SequenceViewer({
                       </div>
                     </div>
                   )}
-                </>
+                </div>
               ) : (
                 // Google Drive video (longer ID)
                 <iframe
