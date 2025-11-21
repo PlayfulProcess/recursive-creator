@@ -445,11 +445,9 @@ function NewSequencePageContent() {
 
         if (shouldPublish) {
           setPublishedUrl(`https://recursive.eco/view/${editingId}`);
-          setPublishedDocId(editingId);
           setIsPublished(true);
         } else {
           setPublishedUrl(null);
-          setPublishedDocId(null);
           setIsPublished(false);
         }
 
@@ -951,7 +949,7 @@ function NewSequencePageContent() {
                     Claude/ChatGPT (AI tools), Amazon (products), or Google Drive (shared files).
                   </p>
                   <a
-                    href={`https://channels.recursive.eco/?doc_id=${publishedDocId}&channel=kids-stories`}
+                    href={`https://channels.recursive.eco/channels/kids-stories?link=${encodeURIComponent(publishedUrl)}&title=${encodeURIComponent(title)}&description=${encodeURIComponent(description || '')}`}
                     target="_blank"
                     rel="noopener"
                     className="inline-block px-6 py-2 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition-colors"
