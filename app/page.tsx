@@ -3,18 +3,15 @@
 import { useAuth } from '@/components/AuthProvider';
 import { PageModals } from '@/components/PageModals';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 
 export default function Home() {
   const { user, status } = useAuth();
   const router = useRouter();
-  const [showAuthModal, setShowAuthModal] = useState(false);
 
   useEffect(() => {
     if (status === 'authenticated' && user) {
       router.push('/dashboard');
-    } else if (status === 'unauthenticated') {
-      setShowAuthModal(true);
     }
   }, [status, user, router]);
 
@@ -53,7 +50,11 @@ export default function Home() {
                 add narration, and publish to share with the community.
               </p>
               <button
-                onClick={() => setShowAuthModal(true)}
+                onClick={() => {
+                  if (typeof window !== 'undefined' && (window as any).__openAuthModal) {
+                    (window as any).__openAuthModal();
+                  }
+                }}
                 className="px-8 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-semibold text-lg shadow-lg"
               >
                 ✨ Sign In to Create
