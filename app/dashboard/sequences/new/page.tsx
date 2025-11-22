@@ -61,11 +61,11 @@ function NewSequencePageContent() {
   // License agreement
   const [licenseAgreed, setLicenseAgreed] = useState(false);
 
-  // Available channels for submission
+  // Available channels for submission (matching channels.recursive.eco header)
   const AVAILABLE_CHANNELS = [
-    { id: 'kids-stories', name: 'Kids Stories', description: 'Children\'s books, educational content, family-friendly videos' },
-    { id: 'wellness', name: 'Wellness', description: 'Mental health, mindfulness, self-care resources' },
-    { id: 'learning', name: 'Learning', description: 'Educational resources, tutorials, skill-building content' },
+    { id: 'kids-stories', name: 'Community Kids Stories', description: 'Parent-Created Stories for Children' },
+    { id: 'wellness', name: 'Wellness', description: 'Interactive Tools for a better life' },
+    { id: 'resources', name: 'Resources for Parents', description: 'Curated Content for Parenting, Growth, and Family Wellbeing' },
   ];
 
   // Load sequence data when editing
