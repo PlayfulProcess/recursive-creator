@@ -580,6 +580,44 @@ If no → simplify the forge.
 - `user_documents` - Generic user data (JSONB-heavy, keep as-is)
 - `newsletter_subscribers` - Email signups
 
+**Channels Table Schema:**
+```sql
+CREATE TABLE public.channels (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  slug text UNIQUE NOT NULL,  -- e.g., 'kids-stories', 'wellness', 'learning'
+  channel_data jsonb,           -- All channel info stored here
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+```
+
+**channel_data JSONB structure:**
+```json
+{
+  "name": "Kids Stories",           // ← ONLY FIELD WE NEED for channel selection
+  "description": "...",              // Optional: can use for tooltip/subtitle
+  "is_active": "true",               // Filter by this to show only active channels
+  "icon": "📚",                      // Optional: emoji icon
+  "tagline": "...",                  // Other fields (not needed for basic fetch)
+  "theme": {...},
+  "settings": {...}
+}
+```
+
+**To fetch active channels (SIMPLE):**
+```typescript
+const { data } = await supabase
+  .from('channels')
+  .select('slug, channel_data')
+  .eq('channel_data->>is_active', 'true');
+
+// Extract just the name
+const channels = data.map(ch => ({
+  slug: ch.slug,
+  name: ch.channel_data?.name || ch.slug
+}));
+```
+
 **New Tables (To Create for Phase 1):**
 
 Using **JSONB-heavy approach** for simplicity (see SIMPLE_JSONB_SCHEMA.md):
