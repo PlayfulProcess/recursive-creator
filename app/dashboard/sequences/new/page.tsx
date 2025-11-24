@@ -49,8 +49,27 @@ function NewSequencePageContent() {
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
 
+  // YouTube playlist import modal
+  const [showPlaylistModal, setShowPlaylistModal] = useState(false);
+  const [playlistUrl, setPlaylistUrl] = useState('');
+  const [importingPlaylist, setImportingPlaylist] = useState(false);
+  const [playlistError, setPlaylistError] = useState<string | null>(null);
+
+  // Store video metadata (URL → title mapping) from YouTube API
+  const [videoMetadata, setVideoMetadata] = useState<Map<string, string>>(new Map());
+
+  // Channel selection modal
+  const [showChannelSelectModal, setShowChannelSelectModal] = useState(false);
+
   // License agreement
   const [licenseAgreed, setLicenseAgreed] = useState(false);
+
+  // Available channels for submission
+  const AVAILABLE_CHANNELS = [
+    { id: 'kids-stories', name: 'Kids Stories', description: 'Children\'s books, educational content, family-friendly videos' },
+    { id: 'wellness', name: 'Wellness', description: 'Mental health, mindfulness, self-care resources' },
+    { id: 'learning', name: 'Learning', description: 'Educational resources, tutorials, skill-building content' },
+  ];
 
   // Load sequence data when editing
   useEffect(() => {
@@ -189,6 +208,7 @@ function NewSequencePageContent() {
   const extractYouTubeId = (url: string): string => {
     const patterns = [
       /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
+      /youtube\.com\/shorts\/([^&\n?#]+)/,  // YouTube Shorts support
       /^([a-zA-Z0-9_-]{11})$/
     ];
 
@@ -248,6 +268,7 @@ function NewSequencePageContent() {
     }
 
     const newItems: SequenceItem[] = [];
+    const startPosition = items.length; // Start positions after existing items
 
     lines.forEach((line, index) => {
       const { type, processedUrl } = detectUrlType(line);
@@ -256,18 +277,20 @@ function NewSequencePageContent() {
         // Check if it's YouTube or Drive
         if (processedUrl.includes('youtube.com') || processedUrl.includes('youtu.be')) {
           const videoId = extractYouTubeId(processedUrl);
+          // Check if we have title metadata from YouTube API import
+          const title = videoMetadata.get(processedUrl) || '';
           newItems.push({
-            position: index + 1,
+            position: startPosition + index + 1,
             type: 'video',
             video_id: videoId,
             url: processedUrl,
-            title: ''
+            title: title
           });
         } else if (processedUrl.includes('drive.google.com')) {
           // Drive video
           const driveId = convertGoogleDriveVideoUrl(processedUrl);
           newItems.push({
-            position: index + 1,
+            position: startPosition + index + 1,
             type: 'video',
             video_id: driveId,  // Drive file ID
             url: processedUrl,
@@ -280,7 +303,7 @@ function NewSequencePageContent() {
       } else {
         const convertedUrl = convertGoogleDriveUrl(processedUrl);
         newItems.push({
-          position: index + 1,
+          position: startPosition + index + 1,
           type: 'image',
           image_url: convertedUrl,
           alt_text: '',
@@ -289,8 +312,8 @@ function NewSequencePageContent() {
       }
     });
 
-    // REPLACE items completely (don't add to existing)
-    setItems(newItems);
+    // APPEND new items to existing items
+    setItems(prev => [...prev, ...newItems]);
     setError(null);
   };
 
@@ -316,8 +339,9 @@ function NewSequencePageContent() {
         throw new Error(data.error || 'Failed to import folder');
       }
 
-      // Auto-populate bulk textarea with imported URLs
-      setBulkUrls(data.urls.join('\n'));
+      // Append imported URLs to existing content
+      const newUrls = data.urls.join('\n');
+      setBulkUrls(prev => prev ? `${prev}\n${newUrls}` : newUrls);
 
       // Close modal
       setShowImportModal(false);
@@ -330,6 +354,53 @@ function NewSequencePageContent() {
       setImportError(err.message || 'Failed to import folder');
     } finally {
       setImporting(false);
+    }
+  };
+
+  const handleImportPlaylist = async () => {
+    if (!playlistUrl.trim()) {
+      setPlaylistError('Please enter a playlist URL');
+      return;
+    }
+
+    setImportingPlaylist(true);
+    setPlaylistError(null);
+
+    try {
+      const response = await fetch('/api/extract-playlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playlistUrl })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to import playlist');
+      }
+
+      // Store video metadata (URL → title mapping) for later use
+      const newMetadata = new Map(videoMetadata);
+      data.videos.forEach((v: any) => {
+        newMetadata.set(v.url, v.title);
+      });
+      setVideoMetadata(newMetadata);
+
+      // Append video URLs to existing content
+      const videoUrls = data.videos.map((v: any) => v.url).join('\n');
+      setBulkUrls(prev => prev ? `${prev}\n${videoUrls}` : videoUrls);
+
+      // Close modal
+      setShowPlaylistModal(false);
+      setPlaylistUrl('');
+
+      // Show success message
+      setError(`✅ Imported ${data.count} videos from playlist! Click "Update Sidebar" to add them.`);
+
+    } catch (err: any) {
+      setPlaylistError(err.message || 'Failed to import playlist');
+    } finally {
+      setImportingPlaylist(false);
     }
   };
 
@@ -444,11 +515,9 @@ function NewSequencePageContent() {
 
         if (shouldPublish) {
           setPublishedUrl(`https://recursive.eco/view/${editingId}`);
-          setPublishedDocId(editingId);
           setIsPublished(true);
         } else {
           setPublishedUrl(null);
-          setPublishedDocId(null);
           setIsPublished(false);
         }
 
@@ -657,6 +726,13 @@ function NewSequencePageContent() {
                   >
                     📁 Import Folder
                   </button>
+                  <button
+                    onClick={() => setShowPlaylistModal(true)}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors whitespace-nowrap"
+                    title="Import all videos from a YouTube playlist"
+                  >
+                    🎬 Import Playlist
+                  </button>
                 </div>
               </div>
             </div>
@@ -838,21 +914,24 @@ function NewSequencePageContent() {
                   📖 Publishing Your Content
                 </h3>
                 <p className="text-gray-300 text-sm mb-4">
-                  When you publish, all <strong>original content you create</strong>{' '}
-                  (images, text, narration) will be licensed under{' '}
-                  <a
-                    href="https://creativecommons.org/licenses/by-sa/4.0/"
-                    target="_blank"
-                    rel="noopener"
-                    className="text-purple-400 hover:text-purple-300 underline font-semibold"
-                  >
-                    Creative Commons BY-SA 4.0
-                  </a>.
+                  When you publish, content will be attributed as follows:
                 </p>
-                <p className="text-gray-300 text-sm mb-4">
-                  If you include links to external content (like YouTube videos),
-                  those remain under their original creators' terms—you're simply
-                  curating a collection.
+                <ul className="text-gray-300 text-sm mb-4 space-y-2 list-disc list-inside">
+                  <li><strong>YouTube videos</strong> remain under their original creators' licenses (you're curating, not claiming ownership)</li>
+                  <li><strong>Images with visible attribution/license</strong> remain under their specified license</li>
+                  <li><strong>All other content</strong> (your original images, text, narration) will be licensed under{' '}
+                    <a
+                      href="https://creativecommons.org/licenses/by-sa/4.0/"
+                      target="_blank"
+                      rel="noopener"
+                      className="text-purple-400 hover:text-purple-300 underline font-semibold"
+                    >
+                      Creative Commons BY-SA 4.0
+                    </a>
+                  </li>
+                </ul>
+                <p className="text-gray-300 text-sm mb-4 italic">
+                  Without direct attribution to YouTube or another license, content will be assumed to be published under Creative Commons BY-SA 4.0.
                 </p>
 
                 <label className="flex items-start gap-3 cursor-pointer">
@@ -863,8 +942,7 @@ function NewSequencePageContent() {
                     className="mt-1 w-5 h-5 text-purple-600 rounded focus:ring-2 focus:ring-purple-500"
                   />
                   <span className="text-sm text-gray-300">
-                    I confirm that I own or have permission to use all original content
-                    in this project, and I agree to license it under CC BY-SA 4.0.
+                    I confirm that all content not coming from YouTube or specifically attributed under another license can be published under CC BY-SA 4.0. I own or have permission to use all such content.
                     I have read the{' '}
                     <a
                       href="https://recursive.eco/pages/about.html#terms"
@@ -949,14 +1027,12 @@ function NewSequencePageContent() {
                     💡 You can also share links from trusted sources like Goodreads (book recommendations),
                     Claude/ChatGPT (AI tools), Amazon (products), or Google Drive (shared files).
                   </p>
-                  <a
-                    href={`https://channels.recursive.eco/?doc_id=${publishedDocId}&channel=kids-stories`}
-                    target="_blank"
-                    rel="noopener"
+                  <button
+                    onClick={() => setShowChannelSelectModal(true)}
                     className="inline-block px-6 py-2 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition-colors"
                   >
-                    Submit to Community Stories →
-                  </a>
+                    📢 Submit to Channel →
+                  </button>
                   <p className="text-xs text-gray-500 mt-2">
                     Opens in channels.recursive.eco with your content pre-filled.
                     You can review before submitting.
@@ -1049,6 +1125,109 @@ function NewSequencePageContent() {
                   {importing ? 'Importing...' : 'Import Files'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import YouTube Playlist Modal */}
+      {showPlaylistModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg shadow-xl max-w-lg w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-semibold text-white">Import YouTube Playlist</h3>
+              <button
+                onClick={() => {
+                  setShowPlaylistModal(false);
+                  setPlaylistUrl('');
+                  setPlaylistError(null);
+                }}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  YouTube Playlist URL
+                </label>
+                <input
+                  type="text"
+                  value={playlistUrl}
+                  onChange={(e) => setPlaylistUrl(e.target.value)}
+                  placeholder="https://youtube.com/playlist?list=PLxxx..."
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                  autoFocus
+                />
+                <p className="text-xs text-gray-400 mt-2">
+                  Paste a YouTube playlist URL to import all videos (max 50)
+                </p>
+              </div>
+
+              {playlistError && (
+                <div className="px-4 py-3 bg-red-900/20 border border-red-500 rounded-lg text-red-400 text-sm">
+                  {playlistError}
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowPlaylistModal(false);
+                    setPlaylistUrl('');
+                    setPlaylistError(null);
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleImportPlaylist}
+                  disabled={importingPlaylist || !playlistUrl.trim()}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {importingPlaylist ? 'Importing...' : 'Import Videos'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Channel Selection Modal */}
+      {showChannelSelectModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-semibold text-white">Select a Channel</h3>
+              <button
+                onClick={() => setShowChannelSelectModal(false)}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-gray-300 mb-6">
+              Choose which community channel to submit your content to:
+            </p>
+
+            <div className="space-y-3">
+              {AVAILABLE_CHANNELS.map((channel) => (
+                <a
+                  key={channel.id}
+                  href={`https://channels.recursive.eco/channels/${channel.id}?doc_id=${publishedDocId}&channel=${channel.id}`}
+                  target="_blank"
+                  rel="noopener"
+                  onClick={() => setShowChannelSelectModal(false)}
+                  className="block w-full text-left p-4 bg-gray-700 hover:bg-gray-600 rounded-lg border border-gray-600 hover:border-purple-500 transition-all"
+                >
+                  <h4 className="font-semibold text-white mb-1">{channel.name}</h4>
+                  <p className="text-sm text-gray-400">{channel.description}</p>
+                </a>
+              ))}
             </div>
           </div>
         </div>

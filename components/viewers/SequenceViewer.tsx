@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import Script from 'next/script';
 
 interface SequenceItem {
   position: number;
@@ -32,7 +33,11 @@ export default function SequenceViewer({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
+  const [videoEnded, setVideoEnded] = useState(false);
+  const [youtubeApiReady, setYoutubeApiReady] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const playerRef = useRef<any>(null);
 
   const currentItem = items[currentIndex];
   const minSwipeDistance = 50;
@@ -109,14 +114,110 @@ export default function SequenceViewer({
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
+  // Initialize YouTube API
+  useEffect(() => {
+    // Make onYouTubeIframeAPIReady available globally
+    (window as any).onYouTubeIframeAPIReady = () => {
+      console.log('YouTube IFrame API ready');
+      setYoutubeApiReady(true);
+    };
+
+    // Check if API is already loaded
+    if ((window as any).YT && (window as any).YT.Player) {
+      setYoutubeApiReady(true);
+    }
+  }, []);
+
+  // Create YouTube player when video changes
+  useEffect(() => {
+    // Reset video ended state when changing items
+    setVideoEnded(false);
+
+    // Only create player for YouTube videos (11 character ID)
+    if (
+      currentItem.type === 'video' &&
+      currentItem.video_id &&
+      currentItem.video_id.length === 11 &&
+      youtubeApiReady
+    ) {
+      // Destroy existing player if any
+      if (playerRef.current) {
+        playerRef.current.destroy();
+        playerRef.current = null;
+      }
+
+      // Small delay to ensure DOM is ready
+      setTimeout(() => {
+        try {
+          const player = new (window as any).YT.Player(`youtube-player-${currentItem.video_id}`, {
+            videoId: currentItem.video_id,
+            playerVars: {
+              rel: 0,
+              modestbranding: 1,
+              enablejsapi: 1,
+              controls: 1,        // Enable all YouTube controls for creators
+              fs: 1,              // Enable YouTube fullscreen button for creators
+              iv_load_policy: 3   // Hide video annotations
+            },
+            events: {
+              onStateChange: (event: any) => {
+                // YT.PlayerState: -1 (unstarted), 0 (ended), 1 (playing), 2 (paused), 3 (buffering), 5 (cued)
+                if (event.data === 0) {
+                  console.log('Video ended, showing overlay');
+                  setVideoEnded(true);
+                  setIsPlaying(false);
+                } else if (event.data === 1) {
+                  setIsPlaying(true);
+                } else if (event.data === 2) {
+                  setIsPlaying(false);
+                }
+              }
+            }
+          });
+
+          playerRef.current = player;
+        } catch (error) {
+          console.error('Error creating YouTube player:', error);
+        }
+      }, 100);
+    }
+
+    // Cleanup player on unmount or item change
+    return () => {
+      if (playerRef.current) {
+        try {
+          playerRef.current.destroy();
+        } catch (error) {
+          console.error('Error destroying player:', error);
+        }
+        playerRef.current = null;
+      }
+    };
+  }, [currentItem, youtubeApiReady]);
+
+  // Reset video ended state when navigating away
+  useEffect(() => {
+    setVideoEnded(false);
+  }, [currentIndex]);
+
   return (
-    <div
-      ref={containerRef}
-      className="relative w-full h-screen bg-black flex flex-col"
-      onTouchStart={onTouchStart}
-      onTouchMove={onTouchMove}
-      onTouchEnd={onTouchEnd}
-    >
+    <>
+      {/* Load YouTube IFrame API */}
+      <Script
+        src="https://www.youtube.com/iframe_api"
+        strategy="afterInteractive"
+        onLoad={() => {
+          console.log('YouTube API script loaded');
+        }}
+      />
+
+      <div
+        ref={containerRef}
+        className="relative w-full h-screen bg-black flex flex-col"
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
       {/* Header - only show when not fullscreen */}
       {!isFullscreen && (
         <div className="bg-gradient-to-br from-purple-900/80 to-pink-900/80 backdrop-blur-sm p-6 text-center">
@@ -126,7 +227,7 @@ export default function SequenceViewer({
       )}
 
       {/* Content Area */}
-      <div className="flex-1 relative flex items-center justify-center overflow-hidden">
+      <div className="flex-1 relative flex items-center justify-center overflow-hidden pb-28">
         {currentItem.type === 'image' ? (
           <div className="w-full h-full flex flex-col items-center justify-center p-4">
             <img
@@ -144,16 +245,64 @@ export default function SequenceViewer({
           </div>
         ) : (
           <div className="w-full h-full flex items-center justify-center p-4 relative">
-            <div className="w-full max-w-4xl">
+            <div className="w-full max-w-4xl relative">
               {currentItem.video_id && currentItem.video_id.length === 11 ? (
-                // YouTube video (11 character ID)
-                <iframe
-                  src={`https://www.youtube-nocookie.com/embed/${currentItem.video_id}?rel=0&modestbranding=1`}
-                  title={currentItem.title || `Video ${currentItem.position}`}
-                  className="w-full aspect-video rounded-lg"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
+                // YouTube video with Player API
+                <div className="relative w-full aspect-video rounded-lg">
+                  <div
+                    id={`youtube-player-${currentItem.video_id}`}
+                    className="w-full h-full rounded-lg"
+                  />
+
+                  {/* Custom overlay when video ends */}
+                  {videoEnded && (
+                    <div className="absolute inset-0 bg-black rounded-lg flex flex-col items-center justify-center gap-6 z-[9999]">
+                      <div className="text-center">
+                        <h3 className="text-white text-2xl font-bold mb-2">
+                          {currentItem.title || 'Video Complete'}
+                        </h3>
+                        <p className="text-gray-300">
+                          What would you like to do next?
+                        </p>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row gap-4">
+                        {/* Replay Button */}
+                        <button
+                          onClick={() => {
+                            playerRef.current?.seekTo(0);
+                            playerRef.current?.playVideo();
+                            setVideoEnded(false);
+                          }}
+                          className="px-8 py-4 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold flex items-center justify-center gap-2 transition-all min-w-[160px]"
+                        >
+                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                          Replay
+                        </button>
+
+                        {/* Next Button */}
+                        <button
+                          onClick={() => {
+                            setVideoEnded(false);
+                            if (currentIndex < items.length - 1) {
+                              goToNext();
+                            } else {
+                              setCurrentIndex(0);
+                            }
+                          }}
+                          className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold flex items-center justify-center gap-2 transition-all min-w-[160px]"
+                        >
+                          Next
+                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               ) : (
                 // Google Drive video (longer ID)
                 <iframe
@@ -165,7 +314,7 @@ export default function SequenceViewer({
                 />
               )}
             </div>
-            {currentItem.title && (
+            {currentItem.title && !videoEnded && (
               <div className="absolute bottom-8 left-0 right-0 text-center pointer-events-none">
                 <p className="text-white text-lg px-6 py-3 bg-black/50 rounded-lg backdrop-blur-sm inline-block">
                   {currentItem.title}
@@ -206,7 +355,7 @@ export default function SequenceViewer({
       </div>
 
       {/* Controls Overlay - bottom */}
-      <div className="absolute bottom-0 left-0 right-0 p-6 flex items-center justify-between pointer-events-none">
+      <div className="absolute bottom-0 left-0 right-0 p-6 flex items-center justify-between pointer-events-none z-50">
         {/* Page Counter */}
         <div className="bg-black/70 text-white px-4 py-2 rounded-full text-sm backdrop-blur-sm pointer-events-auto">
           {currentIndex + 1} / {items.length}
@@ -238,6 +387,7 @@ export default function SequenceViewer({
           </p>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }
