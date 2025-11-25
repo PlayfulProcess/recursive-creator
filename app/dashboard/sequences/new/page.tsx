@@ -931,7 +931,7 @@ function NewSequencePageContent() {
                   </li>
                 </ul>
                 <p className="text-gray-300 text-sm mb-4 italic">
-                  Without direct attribution to YouTube or another license, content will be assumed to be published under Creative Commons BY-SA 4.0.
+                  Without direct attribution to YouTube or another license on the content itself, content will be assumed to be published under Creative Commons BY-SA 4.0.
                 </p>
 
                 <label className="flex items-start gap-3 cursor-pointer">
