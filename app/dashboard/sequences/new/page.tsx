@@ -42,6 +42,7 @@ function NewSequencePageContent() {
   const [isPublished, setIsPublished] = useState(false);
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
   const [publishedDocId, setPublishedDocId] = useState<string | null>(null);
+  const [isReported, setIsReported] = useState(false); // Track if content has been reported
 
   // Drive folder import modal
   const [showImportModal, setShowImportModal] = useState(false);
@@ -96,6 +97,10 @@ function NewSequencePageContent() {
       // Check if published (from document_data.is_published)
       const isPublishedValue = data.document_data.is_published === 'true';
       setIsPublished(isPublishedValue);
+
+      // Check if reported (blocks re-publishing)
+      const isReportedValue = data.reported === true;
+      setIsReported(isReportedValue);
 
       // Set published URL and doc ID if published
       if (isPublishedValue) {
@@ -907,8 +912,30 @@ function NewSequencePageContent() {
               </div>
             )}
 
+            {/* Warning message for reported content */}
+            {isReported && (
+              <div className="bg-red-900/50 border border-red-700 rounded-lg p-6 mb-6">
+                <h3 className="text-lg font-semibold text-red-200 mb-3 flex items-center gap-2">
+                  <span>⚠️</span> Content Reported
+                </h3>
+                <p className="text-red-200 mb-3">
+                  This content has been reported by a viewer and cannot be published until reviewed by an administrator.
+                </p>
+                <p className="text-red-200 text-sm">
+                  If you believe this was done in error, please email{' '}
+                  <a
+                    href="mailto:pp@playfulprocess.com"
+                    className="text-red-300 hover:text-red-100 underline font-semibold"
+                  >
+                    pp@playfulprocess.com
+                  </a>
+                  {' '}to appeal.
+                </p>
+              </div>
+            )}
+
             {/* License Agreement - Show before publishing */}
-            {!isPublished && (
+            {!isPublished && !isReported && (
               <div className="bg-purple-900/30 border border-purple-700/50 rounded-lg p-6 mb-6">
                 <h3 className="text-lg font-semibold text-white mb-3">
                   📖 Publishing Your Content
@@ -968,7 +995,7 @@ function NewSequencePageContent() {
 
               <button
                 onClick={() => handleSaveDraft(true)}  // Force to published mode
-                disabled={saving || !title.trim() || items.length === 0 || !licenseAgreed}
+                disabled={saving || !title.trim() || items.length === 0 || !licenseAgreed || isReported}
                 className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {saving ? 'Publishing...' : (editingId && isPublished ? 'Update Published' : '🌐 Publish')}
