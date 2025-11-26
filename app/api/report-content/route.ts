@@ -1,22 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient as createBrowserClient } from '@supabase/ssr';
+import { createClient } from '@/lib/supabase-server';
 import { Resend } from 'resend';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-
-// Create admin client with service role key for server-side operations
-function createAdminClient() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!, // Service role key for admin operations
-    {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      }
-    }
-  );
-}
 
 // CORS headers
 const corsHeaders = {
@@ -49,7 +35,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = createAdminClient();
+    const supabase = await createClient();
 
     // Fetch document and creator info
     const { data: document, error: docError } = await supabase
@@ -59,35 +45,38 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (docError || !document) {
-      console.error('Document not found:', docError);
+      console.error('❌ Document not found:', docError);
       return NextResponse.json(
         { error: 'Document not found' },
         { status: 404, headers: corsHeaders }
       );
     }
 
-    // Fetch creator email from auth.users table
-    const { data: userData, error: userError } = await supabase.auth.admin.getUserById(
-      document.user_id
-    );
-
-    if (userError) {
-      console.error('❌ Error fetching user:', userError);
-      return NextResponse.json(
-        { error: 'Failed to fetch user information' },
-        { status: 500, headers: corsHeaders }
-      );
-    }
-
-    const creatorEmail = userData?.user?.email;
     const playlistTitle = document.document_data?.title || 'Untitled Playlist';
+
+    // Try to fetch creator email (optional - won't fail if not available)
+    let creatorEmail: string | null = null;
+    try {
+      const { data: userData, error: userError } = await supabase.auth.admin.getUserById(
+        document.user_id
+      );
+
+      if (userError) {
+        console.warn('⚠️ Could not fetch creator email (non-fatal):', userError.message);
+      } else {
+        creatorEmail = userData?.user?.email || null;
+      }
+    } catch (emailFetchError) {
+      console.warn('⚠️ Creator email fetch failed (continuing anyway):', emailFetchError);
+    }
 
     console.log('✅ Report processing:', {
       documentId,
       reportType,
-      creatorEmail,
+      creatorEmail: creatorEmail || 'Not available',
       playlistTitle,
-      hasResendKey: !!process.env.RESEND_API_KEY
+      hasResendKey: !!process.env.RESEND_API_KEY,
+      willEmailCreator: !!creatorEmail
     });
 
     // Update document in Supabase
