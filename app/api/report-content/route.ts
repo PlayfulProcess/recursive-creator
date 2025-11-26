@@ -1,8 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase-client';
+import { createClient as createBrowserClient } from '@supabase/ssr';
 import { Resend } from 'resend';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
+
+// Create admin client with service role key for server-side operations
+function createAdminClient() {
+  return createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!, // Service role key for admin operations
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      }
+    }
+  );
+}
 
 // CORS headers
 const corsHeaders = {
@@ -35,7 +49,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = createClient();
+    const supabase = createAdminClient();
 
     // Fetch document and creator info
     const { data: document, error: docError } = await supabase
@@ -58,11 +72,23 @@ export async function POST(request: NextRequest) {
     );
 
     if (userError) {
-      console.error('Error fetching user:', userError);
+      console.error('❌ Error fetching user:', userError);
+      return NextResponse.json(
+        { error: 'Failed to fetch user information' },
+        { status: 500, headers: corsHeaders }
+      );
     }
 
     const creatorEmail = userData?.user?.email;
     const playlistTitle = document.document_data?.title || 'Untitled Playlist';
+
+    console.log('✅ Report processing:', {
+      documentId,
+      reportType,
+      creatorEmail,
+      playlistTitle,
+      hasResendKey: !!process.env.RESEND_API_KEY
+    });
 
     // Update document in Supabase
     const updates: any = {
