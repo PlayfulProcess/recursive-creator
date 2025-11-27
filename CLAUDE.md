@@ -2118,7 +2118,52 @@ const [playlistError, setPlaylistError] = useState<string | null>(null);
 
 ---
 
-## Phase 10: Content Reporting & Auto-Moderation (FUTURE)
+## Phase 10: Content Reporting & Auto-Moderation
+
+**Status:** ✅ SIMPLIFIED VERSION IMPLEMENTED (2025-11-26)
+
+### Current Implementation: Simplified Database-Only Approach
+
+**What's Implemented:**
+- Report button in `/view.html` (recursive-landing)
+- Direct Supabase update (no API, no emails)
+- Single action: Report & Unpublish
+- Manual monitoring via Supabase dashboard
+
+**How it works:**
+1. User clicks "Report" button
+2. Confirmation modal appears
+3. On confirm, updates database directly:
+   - Sets `reported = true`
+   - Sets `document_data.is_published = 'false'`
+4. Shows success popup
+5. Page reloads and shows "Content not published" error
+
+**Code:** `recursive-landing/view.html:1139-1207`
+
+**Manual Monitoring Query:**
+```sql
+SELECT
+  id,
+  document_data->>'title' as title,
+  reported,
+  document_data->>'is_published' as is_published,
+  created_at
+FROM user_documents
+WHERE reported = true
+ORDER BY created_at DESC;
+```
+
+**Benefits of Simplified Approach:**
+- ✅ Works immediately (no API complexity)
+- ✅ No email configuration needed
+- ✅ Easy to maintain
+- ✅ Manual check prevents false positives
+- ✅ Can add automation later via Supabase triggers
+
+---
+
+### Future: Full Auto-Moderation (NOT YET IMPLEMENTED)
 
 **Problem:** Need way for viewers to report inappropriate content while preventing abuse
 
@@ -2206,7 +2251,7 @@ ALTER TABLE profiles ADD COLUMN total_reports_received INTEGER DEFAULT 0;
 
 ---
 
-## Phase 11: YouTube End-Screen Overlay (Hide Suggested Videos)
+## Phase 11: YouTube End-Screen Overlay (Hide Suggested Videos) - implemented!!!
 
 **Date:** 2025-11-20
 **Status:** Planning
@@ -2625,7 +2670,7 @@ return (
 **What Was Completed:**
 - ✅ Phase 11A: YouTube Player API implemented in recursive-creator (SequenceViewer.tsx)
 - ✅ Phase 11B: YouTube Player API implemented in recursive-landing (view.html)
-- ✅ Both viewers have end-screen overlay with Replay/Next buttons
+- ✅ Both viewers have end-screen overlay with Replay/Next buttons (actually, we undid this as mobile got disrupted..., need to reacess)
 - ✅ Both viewers have play/pause overlay controls
 - ✅ Locked experience with controls=0, fs=0, iv_load_policy=3
 
