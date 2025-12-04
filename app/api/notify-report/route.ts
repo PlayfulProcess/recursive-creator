@@ -3,6 +3,18 @@ import { Resend } from 'resend';
 
 const NOTIFICATION_EMAIL = process.env.NOTIFICATION_EMAIL || 'pp@playfulprocess.com';
 
+// CORS headers for cross-origin requests from recursive.eco domains
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*', // Allow all origins (or specify 'https://dev.recursive.eco, https://recursive.eco')
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+// Handle preflight OPTIONS request
+export async function OPTIONS(request: NextRequest) {
+  return NextResponse.json({}, { headers: corsHeaders });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { contentId, reportType, explanation, reporterEmail, viewerUrl } = await request.json();
@@ -11,7 +23,7 @@ export async function POST(request: NextRequest) {
     const apiKey = process.env.RESEND_API_KEY;
     if (!apiKey) {
       console.warn('RESEND_API_KEY not configured - skipping email notification');
-      return NextResponse.json({ success: true, sent: false });
+      return NextResponse.json({ success: true, sent: false }, { headers: corsHeaders });
     }
 
     const resend = new Resend(apiKey);
@@ -92,11 +104,11 @@ export async function POST(request: NextRequest) {
       console.log('✅ Admin notification sent:', { emailId: adminData?.id });
     }
 
-    return NextResponse.json({ success: true, sent: true, adminEmailId: adminData?.id });
+    return NextResponse.json({ success: true, sent: true, adminEmailId: adminData?.id }, { headers: corsHeaders });
 
   } catch (error) {
     console.error('Error sending report notification:', error);
     // Silent failure - return success so user flow isn't interrupted
-    return NextResponse.json({ success: true, sent: false });
+    return NextResponse.json({ success: true, sent: false }, { headers: corsHeaders });
   }
 }
