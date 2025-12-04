@@ -21,6 +21,9 @@ interface SequenceItem {
   video_id?: string;
   url?: string;
   title?: string;
+  creator?: string;           // YouTube channel name
+  thumbnail?: string;         // Better quality thumbnail URL
+  duration_seconds?: number;  // Video duration in seconds
 }
 
 function NewSequencePageContent() {
@@ -282,14 +285,17 @@ function NewSequencePageContent() {
         // Check if it's YouTube or Drive
         if (processedUrl.includes('youtube.com') || processedUrl.includes('youtu.be')) {
           const videoId = extractYouTubeId(processedUrl);
-          // Check if we have title metadata from YouTube API import
-          const title = videoMetadata.get(processedUrl) || '';
+          // Check if we have full metadata from YouTube API import
+          const metadata = videoMetadata.get(processedUrl);
           newItems.push({
             position: startPosition + index + 1,
             type: 'video',
             video_id: videoId,
             url: processedUrl,
-            title: title
+            title: metadata?.title || '',
+            creator: metadata?.creator || '',
+            thumbnail: metadata?.thumbnail || '',
+            duration_seconds: metadata?.duration_seconds || 0
           });
         } else if (processedUrl.includes('drive.google.com')) {
           // Drive video
@@ -384,10 +390,15 @@ function NewSequencePageContent() {
         throw new Error(data.error || 'Failed to import playlist');
       }
 
-      // Store video metadata (URL → title mapping) for later use
+      // Store full video metadata (URL → complete metadata object) for later use
       const newMetadata = new Map(videoMetadata);
       data.videos.forEach((v: any) => {
-        newMetadata.set(v.url, v.title);
+        newMetadata.set(v.url, {
+          title: v.title,
+          creator: v.creator,
+          thumbnail: v.thumbnail,
+          duration_seconds: v.duration_seconds
+        });
       });
       setVideoMetadata(newMetadata);
 
