@@ -205,6 +205,9 @@ function NewSequencePageContent() {
   // License agreement
   const [licenseAgreed, setLicenseAgreed] = useState(false);
 
+  // Track unsaved changes for floating save button
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
   // Available channels for submission (matching channels.recursive.eco header)
   const AVAILABLE_CHANNELS = [
     { id: 'kids-stories', name: 'Community Kids Stories', description: 'Parent-Created Stories for Children' },
@@ -233,6 +236,17 @@ function NewSequencePageContent() {
       loadSequence(editingId);
     }
   }, [editingId, user]);
+
+  // Track unsaved changes (but ignore initial load)
+  useEffect(() => {
+    // Don't mark as unsaved on initial load or during save
+    if (saving || loading) return;
+
+    // If we have title or items, consider it changed (unless just loaded)
+    if (title || description || items.length > 0) {
+      setHasUnsavedChanges(true);
+    }
+  }, [title, description, items, saving, loading]);
 
   const loadSequence = async (id: string) => {
     setLoading(true);
@@ -717,6 +731,7 @@ function NewSequencePageContent() {
         }
 
         setSuccess(true);
+        setHasUnsavedChanges(false); // Clear unsaved flag after successful save
       } else {
         // CREATE MODE: Insert new project
         const baseSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -778,6 +793,7 @@ function NewSequencePageContent() {
         }
 
         setSuccess(true);
+        setHasUnsavedChanges(false); // Clear unsaved flag after successful save
         // Transition to edit mode
         router.push(`/dashboard/sequences/new?id=${insertData.id}`);
       }
@@ -853,6 +869,22 @@ function NewSequencePageContent() {
 
   return (
     <div className="min-h-screen bg-gray-900">
+      {/* Floating Save Button */}
+      {hasUnsavedChanges && !saving && (
+        <div className="fixed top-4 right-4 z-50 animate-pulse">
+          <button
+            onClick={() => handleSaveDraft()}
+            disabled={saving}
+            className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-lg font-semibold transition-all hover:scale-105"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+            </svg>
+            Save Changes
+          </button>
+        </div>
+      )}
+
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-8">
           {/* Metadata */}
