@@ -57,9 +57,10 @@ interface SortableItemCardProps {
   index: number;
   onDelete: () => void;
   onEditTitle: (newTitle: string) => void;
+  onPositionClick: () => void;
 }
 
-function SortableItemCard({ id, item, index, onDelete, onEditTitle }: SortableItemCardProps) {
+function SortableItemCard({ id, item, index, onDelete, onEditTitle, onPositionClick }: SortableItemCardProps) {
   const {
     attributes,
     listeners,
@@ -91,7 +92,10 @@ function SortableItemCard({ id, item, index, onDelete, onEditTitle }: SortableIt
       </div>
 
       {/* Position Badge */}
-      <div className="bg-purple-600 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm">
+      <div
+        onClick={onPositionClick}
+        className="bg-purple-600 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm cursor-pointer hover:bg-purple-700 transition-colors"
+      >
         {index + 1}
       </div>
 
@@ -210,6 +214,11 @@ function NewSequencePageContent() {
 
   // Success modal state
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+
+  // Position modal state
+  const [showPositionModal, setShowPositionModal] = useState(false);
+  const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
+  const [newPosition, setNewPosition] = useState('');
 
   // Available channels for submission (matching channels.recursive.eco header)
   const AVAILABLE_CHANNELS = [
@@ -639,6 +648,30 @@ function NewSequencePageContent() {
     });
   };
 
+  // Position modal handlers
+  const handlePositionClick = (index: number) => {
+    setSelectedItemIndex(index);
+    setNewPosition(String(index + 1));
+    setShowPositionModal(true);
+  };
+
+  const handleMoveToPosition = (targetPosition: number) => {
+    if (selectedItemIndex === null || targetPosition < 1 || targetPosition > items.length) return;
+
+    const newItems = [...items];
+    const [movedItem] = newItems.splice(selectedItemIndex, 1);
+    newItems.splice(targetPosition - 1, 0, movedItem);
+
+    // Renumber all positions
+    newItems.forEach((item, i) => {
+      item.position = i + 1;
+    });
+
+    setItems(newItems);
+    setShowPositionModal(false);
+    setSelectedItemIndex(null);
+  };
+
   const handleDeleteItem = (index: number) => {
     const newItems = items.filter((_, i) => i !== index);
     newItems.forEach((item, i) => item.position = i + 1);
@@ -987,6 +1020,7 @@ function NewSequencePageContent() {
                       index={index}
                       onDelete={() => handleDeleteItem(index)}
                       onEditTitle={(newTitle) => handleEditItemTitle(index, newTitle)}
+                      onPositionClick={() => handlePositionClick(index)}
                     />
                   ))}
                 </SortableContext>
@@ -1255,6 +1289,91 @@ function NewSequencePageContent() {
                 Submit to channels.recursive.eco to share with the community
               </p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Position Change Modal */}
+      {showPositionModal && selectedItemIndex !== null && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6 border border-purple-500/30">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                <span>🎯</span>
+                Move Item
+              </h3>
+              <button
+                onClick={() => {
+                  setShowPositionModal(false);
+                  setSelectedItemIndex(null);
+                }}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-gray-300 text-sm mb-4">
+                Current position: <span className="font-bold text-purple-400">#{selectedItemIndex + 1}</span> of {items.length}
+              </p>
+
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                New Position
+              </label>
+              <input
+                type="number"
+                min="1"
+                max={items.length}
+                value={newPosition}
+                onChange={(e) => setNewPosition(e.target.value)}
+                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                placeholder="Enter position (1-{items.length})"
+              />
+            </div>
+
+            {/* Quick Actions */}
+            <div className="space-y-2 mb-4">
+              <button
+                onClick={() => handleMoveToPosition(1)}
+                className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors flex items-center justify-center gap-2"
+              >
+                <span>⬆️</span>
+                Move to Beginning
+              </button>
+
+              <button
+                onClick={() => handleMoveToPosition(items.length)}
+                className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors flex items-center justify-center gap-2"
+              >
+                <span>⬇️</span>
+                Move to End
+              </button>
+
+              <button
+                onClick={() => {
+                  const pos = parseInt(newPosition);
+                  if (!isNaN(pos)) {
+                    handleMoveToPosition(pos);
+                  }
+                }}
+                disabled={!newPosition || parseInt(newPosition) < 1 || parseInt(newPosition) > items.length}
+                className="w-full px-4 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg font-semibold transition-colors flex items-center justify-center gap-2"
+              >
+                <span>↔️</span>
+                Move to Position {newPosition || '...'}
+              </button>
+            </div>
+
+            <button
+              onClick={() => {
+                setShowPositionModal(false);
+                setSelectedItemIndex(null);
+              }}
+              className="w-full px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}
