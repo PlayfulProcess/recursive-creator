@@ -5,6 +5,24 @@ import { useAuth } from '@/components/AuthProvider';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase-client';
 import SequenceViewer from '@/components/viewers/SequenceViewer';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 const MAX_ITEMS = 50; // Security limit
 
@@ -33,6 +51,115 @@ interface VideoMetadata {
   duration_seconds: number;
 }
 
+interface SortableItemCardProps {
+  id: string;
+  item: SequenceItem;
+  index: number;
+  onDelete: () => void;
+  onEditTitle: (newTitle: string) => void;
+}
+
+function SortableItemCard({ id, item, index, onDelete, onEditTitle }: SortableItemCardProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="bg-gray-700 rounded-lg p-4 mb-3 border border-gray-600 flex items-center gap-4"
+    >
+      {/* Drag Handle */}
+      <div
+        {...attributes}
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-white text-2xl"
+      >
+        ≡
+      </div>
+
+      {/* Position Badge */}
+      <div className="bg-purple-600 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm">
+        {index + 1}
+      </div>
+
+      {/* Thumbnail */}
+      {item.type === 'video' ? (
+        item.video_id && item.video_id.length === 11 ? (
+          <img
+            src={item.thumbnail || `https://i.ytimg.com/vi/${item.video_id}/mqdefault.jpg`}
+            alt={item.title || 'Video thumbnail'}
+            className="w-32 h-18 object-cover rounded"
+          />
+        ) : (
+          <div className="w-32 h-18 bg-gray-600 rounded flex items-center justify-center text-gray-400 text-xs">
+            Drive Video
+          </div>
+        )
+      ) : (
+        <img
+          src={`/api/proxy-image?url=${encodeURIComponent(item.image_url || '')}`}
+          alt={item.alt_text || 'Image'}
+          className="w-32 h-18 object-cover rounded"
+          onError={(e) => {
+            // Fallback for broken images
+            (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="128" height="72"%3E%3Crect fill="%23374151" width="128" height="72"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%239ca3af" font-size="12"%3EImage%3C/text%3E%3C/svg%3E';
+          }}
+        />
+      )}
+
+      {/* Content Info */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-lg">{item.type === 'video' ? '🎥' : '📷'}</span>
+          <span className="text-white font-semibold truncate">
+            {item.type === 'video'
+              ? (item.title || item.video_id || 'Untitled')
+              : (item.alt_text || 'Untitled')}
+          </span>
+        </div>
+        <div className="text-gray-400 text-sm font-mono truncate">
+          ID: {item.video_id || item.image_url?.split('/').pop()?.substring(0, 20) || 'N/A'}
+        </div>
+        {item.type === 'video' && item.creator && (
+          <div className="text-gray-400 text-sm truncate">
+            By: {item.creator}
+          </div>
+        )}
+
+        {/* Inline Title Edit */}
+        <input
+          type="text"
+          value={item.type === 'video' ? (item.title || '') : (item.alt_text || '')}
+          onChange={(e) => onEditTitle(e.target.value)}
+          placeholder={item.type === 'video' ? 'Video title...' : 'Alt text...'}
+          className="mt-2 w-full px-2 py-1 bg-gray-600 border border-gray-500 rounded text-white text-sm"
+        />
+      </div>
+
+      {/* Delete Button */}
+      <button
+        onClick={onDelete}
+        className="text-red-500 hover:text-red-400 text-2xl font-bold"
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
 function NewSequencePageContent() {
   const { user, status } = useAuth();
   const router = useRouter();
@@ -44,7 +171,6 @@ function NewSequencePageContent() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [items, setItems] = useState<SequenceItem[]>([]);
-  const [bulkUrls, setBulkUrls] = useState('');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,14 +192,15 @@ function NewSequencePageContent() {
   const [importingPlaylist, setImportingPlaylist] = useState(false);
   const [playlistError, setPlaylistError] = useState<string | null>(null);
 
+  // Import Links modal (bulk URL import)
+  const [showImportLinksModal, setShowImportLinksModal] = useState(false);
+  const [modalBulkUrls, setModalBulkUrls] = useState('');
+
   // Store video metadata (URL → title mapping) from YouTube API
   const [videoMetadata, setVideoMetadata] = useState<Map<string, VideoMetadata>>(new Map());
 
   // Channel selection modal
   const [showChannelSelectModal, setShowChannelSelectModal] = useState(false);
-
-  // Position input state (for Enter key handling)
-  const [pendingPositions, setPendingPositions] = useState<{[key: number]: string}>({});
 
   // License agreement
   const [licenseAgreed, setLicenseAgreed] = useState(false);
@@ -84,6 +211,21 @@ function NewSequencePageContent() {
     { id: 'wellness', name: 'Wellness', description: 'Interactive Tools for a better life' },
     { id: 'resources', name: 'Resources for Parents', description: 'Curated Content for Parenting, Growth, and Family Wellbeing' },
   ];
+
+  // Setup drag-and-drop sensors for touch, mouse, and keyboard
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(TouchSensor, {
+      // Require minimal movement before starting drag (prevents accidental drags)
+      activationConstraint: {
+        delay: 100,
+        tolerance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   // Load sequence data when editing
   useEffect(() => {
@@ -146,28 +288,6 @@ function NewSequencePageContent() {
           return item;
         });
         setItems(cleanedItems);
-
-        // Populate bulkUrls textarea with existing URLs
-        const urlList = cleanedItems.map((item: SequenceItem) => {
-          if (item.type === 'video') {
-            // Check if it's Drive video (longer ID) or YouTube (11 chars)
-            if (item.video_id && item.video_id.length > 11) {
-              // Drive video
-              return `video: https://drive.google.com/file/d/${item.video_id}/view`;
-            } else if (item.url) {
-              // YouTube - use original URL if available
-              return item.url;
-            } else {
-              // YouTube - reconstruct from ID
-              return `https://youtube.com/watch?v=${item.video_id}`;
-            }
-          } else {
-            // Image
-            return item.image_url || '';
-          }
-        }).filter((url: string) => url.trim() !== '');
-
-        setBulkUrls(urlList.join('\n'));
       }
     } catch (err) {
       console.error('Error loading project:', err);
@@ -269,44 +389,145 @@ function NewSequencePageContent() {
     return { type: 'image', processedUrl: trimmedUrl };
   };
 
-  const handleUpdateLinksFromSidebar = () => {
-    // Generate URLs from current items in sidebar
-    const urlList = items.map((item: SequenceItem) => {
-      if (item.type === 'video') {
-        // Check if it's Drive video (longer ID) or YouTube (11 chars)
-        if (item.video_id && item.video_id.length > 11) {
-          // Drive video
-          return `video: https://drive.google.com/file/d/${item.video_id}/view`;
-        } else if (item.url) {
-          // YouTube - use original URL if available
-          return item.url;
-        } else {
-          // YouTube - reconstruct from ID
-          return `https://youtube.com/watch?v=${item.video_id}`;
-        }
-      } else {
-        // Image
-        return item.image_url || '';
-      }
-    }).filter((url: string) => url.trim() !== '');
-
-    setBulkUrls(urlList.join('\n'));
-    setError('✅ Links updated from sidebar');
-  };
-
-  const handleParseBulkUrls = () => {
-    if (!bulkUrls.trim()) {
-      // Empty textarea = clear all items
-      setItems([]);
-      setError(null);
+  const handleImportDriveFolder = async () => {
+    if (!folderUrl.trim()) {
+      setImportError('Please enter a folder URL');
       return;
     }
 
-    // Keep URLs in the order they appear (Import Folder pre-sorts by filename)
-    const lines = bulkUrls.split(/[\n,]+/).filter(line => line.trim());
+    setImporting(true);
+    setImportError(null);
 
-    if (lines.length > MAX_ITEMS) {
-      setError(`Maximum ${MAX_ITEMS} items allowed. You have ${lines.length} URLs.`);
+    try {
+      const response = await fetch('/api/import-drive-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderUrl })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to import folder');
+      }
+
+      // Parse URLs and append directly to items
+      const newItems: SequenceItem[] = [];
+      const startPosition = items.length;
+
+      data.urls.forEach((url: string, index: number) => {
+        const { type, processedUrl } = detectUrlType(url);
+
+        if (type === 'video') {
+          if (processedUrl.includes('drive.google.com')) {
+            const driveId = convertGoogleDriveVideoUrl(processedUrl);
+            newItems.push({
+              position: startPosition + index + 1,
+              type: 'video',
+              video_id: driveId,
+              url: processedUrl,
+              title: ''
+            });
+          }
+        } else {
+          const convertedUrl = convertGoogleDriveUrl(processedUrl);
+          newItems.push({
+            position: startPosition + index + 1,
+            type: 'image',
+            image_url: convertedUrl,
+            alt_text: '',
+            narration: ''
+          });
+        }
+      });
+
+      // Append to items
+      setItems(prev => [...prev, ...newItems]);
+
+      // Close modal
+      setShowImportModal(false);
+      setFolderUrl('');
+
+      // Show success message
+      setError(`✅ Imported ${data.count} files!`);
+
+    } catch (err: any) {
+      setImportError(err.message || 'Failed to import folder');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleImportPlaylist = async () => {
+    if (!playlistUrl.trim()) {
+      setPlaylistError('Please enter a playlist URL');
+      return;
+    }
+
+    setImportingPlaylist(true);
+    setPlaylistError(null);
+
+    try {
+      const response = await fetch('/api/extract-playlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playlistUrl })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to import playlist');
+      }
+
+      // Create items directly from video data (already has full metadata!)
+      const newItems: SequenceItem[] = [];
+      const startPosition = items.length;
+
+      data.videos.forEach((v: any, index: number) => {
+        newItems.push({
+          position: startPosition + index + 1,
+          type: 'video',
+          video_id: extractYouTubeId(v.url),
+          url: v.url,
+          title: v.title,
+          creator: v.creator,
+          thumbnail: v.thumbnail,
+          duration_seconds: v.duration_seconds
+        });
+      });
+
+      // Append to items
+      setItems(prev => [...prev, ...newItems]);
+
+      // Close modal
+      setShowPlaylistModal(false);
+      setPlaylistUrl('');
+
+      // Show success message
+      setError(`✅ Imported ${data.count} videos from playlist!`);
+
+    } catch (err: any) {
+      setPlaylistError(err.message || 'Failed to import playlist');
+    } finally {
+      setImportingPlaylist(false);
+    }
+  };
+
+  const handleImportFromModal = () => {
+    if (!modalBulkUrls.trim()) {
+      // Empty textarea = do nothing
+      setShowImportLinksModal(false);
+      setModalBulkUrls('');
+      return;
+    }
+
+    // Parse URLs from modal (same logic as handleParseBulkUrls)
+    const lines = modalBulkUrls.split(/[\n,]+/).filter(line => line.trim());
+
+    // Check total count (existing + new)
+    if (items.length + lines.length > MAX_ITEMS) {
+      setError(`Maximum ${MAX_ITEMS} items allowed. You have ${items.length} existing items and ${lines.length} new URLs = ${items.length + lines.length} total.`);
       return;
     }
 
@@ -360,122 +581,45 @@ function NewSequencePageContent() {
 
     // APPEND new items to existing items
     setItems(prev => [...prev, ...newItems]);
-    setError(null);
+
+    // Close modal and clear textarea
+    setShowImportLinksModal(false);
+    setModalBulkUrls('');
+
+    // Show success message
+    setError(`✅ Imported ${newItems.length} items!`);
   };
 
-  const handleImportDriveFolder = async () => {
-    if (!folderUrl.trim()) {
-      setImportError('Please enter a folder URL');
-      return;
-    }
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
 
-    setImporting(true);
-    setImportError(null);
+    if (over && active.id !== over.id) {
+      setItems((items) => {
+        const oldIndex = parseInt(active.id as string);
+        const newIndex = parseInt(over.id as string);
 
-    try {
-      const response = await fetch('/api/import-drive-folder', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folderUrl })
-      });
+        const newItems = arrayMove(items, oldIndex, newIndex);
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to import folder');
-      }
-
-      // Append imported URLs to existing content
-      const newUrls = data.urls.join('\n');
-      setBulkUrls(prev => prev ? `${prev}\n${newUrls}` : newUrls);
-
-      // Close modal
-      setShowImportModal(false);
-      setFolderUrl('');
-
-      // Show success message
-      setError(`✅ Imported ${data.count} files! Click "Update Sidebar" to add them.`);
-
-    } catch (err: any) {
-      setImportError(err.message || 'Failed to import folder');
-    } finally {
-      setImporting(false);
-    }
-  };
-
-  const handleImportPlaylist = async () => {
-    if (!playlistUrl.trim()) {
-      setPlaylistError('Please enter a playlist URL');
-      return;
-    }
-
-    setImportingPlaylist(true);
-    setPlaylistError(null);
-
-    try {
-      const response = await fetch('/api/extract-playlist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playlistUrl })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to import playlist');
-      }
-
-      // Store full video metadata (URL → complete metadata object) for later use
-      const newMetadata = new Map(videoMetadata);
-      data.videos.forEach((v: any) => {
-        newMetadata.set(v.url, {
-          title: v.title,
-          creator: v.creator,
-          thumbnail: v.thumbnail,
-          duration_seconds: v.duration_seconds
+        // Renumber positions
+        newItems.forEach((item, i) => {
+          item.position = i + 1;
         });
+
+        return newItems;
       });
-      setVideoMetadata(newMetadata);
-
-      // Append video URLs to existing content
-      const videoUrls = data.videos.map((v: any) => v.url).join('\n');
-      setBulkUrls(prev => prev ? `${prev}\n${videoUrls}` : videoUrls);
-
-      // Close modal
-      setShowPlaylistModal(false);
-      setPlaylistUrl('');
-
-      // Show success message
-      setError(`✅ Imported ${data.count} videos from playlist! Click "Update Sidebar" to add them.`);
-
-    } catch (err: any) {
-      setPlaylistError(err.message || 'Failed to import playlist');
-    } finally {
-      setImportingPlaylist(false);
     }
   };
 
-  const handleReorderItem = (currentIndex: number, newPosition: number) => {
-    const pos = parseInt(String(newPosition));
-
-    // Validate
-    if (isNaN(pos) || pos < 1 || pos > items.length) {
-      return;
-    }
-
-    // Same position, no change
-    if (pos === currentIndex + 1) {
-      return;
-    }
-
-    // Reorder: remove from old position, insert at new position
-    const newItems = [...items];
-    const [movedItem] = newItems.splice(currentIndex, 1);
-    newItems.splice(pos - 1, 0, movedItem);
-
-    // Renumber all items
-    newItems.forEach((item, i) => item.position = i + 1);
-    setItems(newItems);
+  const handleEditItemTitle = (index: number, newTitle: string) => {
+    setItems(prevItems => {
+      const updated = [...prevItems];
+      if (updated[index].type === 'video') {
+        updated[index].title = newTitle;
+      } else {
+        updated[index].alt_text = newTitle;
+      }
+      return updated;
+    });
   };
 
   const handleDeleteItem = (index: number) => {
@@ -742,215 +886,66 @@ function NewSequencePageContent() {
             </div>
           </div>
 
-          {/* Main Content Area - Two Columns */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Left: Bulk URL Input */}
-            <div className="lg:col-span-2 bg-gray-800 rounded-lg shadow-lg p-6">
-              <h2 className="text-lg font-semibold text-white mb-4">Add Content</h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Paste URLs (one per line or comma-separated)
-                  </label>
-                  <textarea
-                    value={bulkUrls}
-                    onChange={(e) => setBulkUrls(e.target.value)}
-                    placeholder="Paste URLs here... (one per line or comma-separated)&#10;&#10;Examples:&#10;https://drive.google.com/file/d/abc123/view&#10;https://youtube.com/watch?v=abc123&#10;video: https://drive.google.com/file/d/abc123/view"
-                    className="w-full h-[40vh] px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                  />
-                  <p className="text-xs text-gray-500 mt-2">
-                    ✨ Auto-detects YouTube videos. Drive defaults to images. Prefix with <code className="bg-gray-600 px-1 rounded">video:</code> for Drive videos.
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleParseBulkUrls}
-                    disabled={!bulkUrls.trim() || items.length >= MAX_ITEMS}
-                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    Update Sidebar →
-                  </button>
-                  <button
-                    onClick={() => setShowImportModal(true)}
-                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors whitespace-nowrap"
-                    title="Import all files from a Drive folder"
-                  >
-                    📁 Import Folder
-                  </button>
-                  <button
-                    onClick={() => setShowPlaylistModal(true)}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors whitespace-nowrap"
-                    title="Import all videos from a YouTube playlist"
-                  >
-                    🎬 Import Playlist
-                  </button>
-                </div>
-              </div>
+          {/* Import Content Buttons */}
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
+            <h2 className="text-xl font-semibold text-white mb-4">Import Content</h2>
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => setShowImportLinksModal(true)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+              >
+                📋 Import Links
+              </button>
+              <button
+                onClick={() => setShowImportModal(true)}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
+              >
+                📁 Import Folder
+              </button>
+              <button
+                onClick={() => setShowPlaylistModal(true)}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
+              >
+                🎬 Import Playlist
+              </button>
             </div>
+          </div>
 
-            {/* Right: Scrollable Sidebar with Items */}
-            <div className="bg-gray-800 rounded-lg shadow-lg p-6">
-              <h2 className="text-lg font-semibold text-white mb-4">
+          {/* Draggable Item Cards */}
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-white">
                 Items ({items.length}/{MAX_ITEMS})
               </h2>
-
-              {items.length === 0 ? (
-                <div className="text-center py-12 text-gray-500">
-                  <p className="text-sm">No items yet</p>
-                  <p className="text-xs mt-1">Paste URLs to get started</p>
-                </div>
-              ) : (
-                <>
-                  {/* Update Links button */}
-                  <button
-                    onClick={handleUpdateLinksFromSidebar}
-                    className="w-full mb-3 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
-                  >
-                    ← Update Links
-                  </button>
-
-                </>
-              )}
-
-              {items.length > 0 && (
-                <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
-                  {items.map((item, index) => (
-                    <div
-                      key={index}
-                      className="bg-gray-700 rounded-lg p-3 border border-gray-600"
-                    >
-                      <div className="flex items-start gap-2 mb-2">
-                        {/* Number Input */}
-                        <input
-                          type="number"
-                          min="1"
-                          max={items.length}
-                          value={pendingPositions[index] !== undefined ? pendingPositions[index] : item.position}
-                          onChange={(e) => {
-                            // Update local state only, don't move item yet
-                            setPendingPositions(prev => ({ ...prev, [index]: e.target.value }));
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              const newPos = parseInt(pendingPositions[index] || item.position.toString());
-                              if (!isNaN(newPos) && newPos >= 1 && newPos <= items.length) {
-                                handleReorderItem(index, newPos);
-                                // Clear pending state
-                                setPendingPositions(prev => {
-                                  const updated = { ...prev };
-                                  delete updated[index];
-                                  return updated;
-                                });
-                              }
-                            }
-                          }}
-                          onBlur={() => {
-                            // Clear pending state on blur without saving
-                            setPendingPositions(prev => {
-                              const updated = { ...prev };
-                              delete updated[index];
-                              return updated;
-                            });
-                          }}
-                          className="w-14 px-2 py-1 bg-gray-600 border border-gray-500 rounded text-white text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-
-                        {/* Type Icon */}
-                        <div className="flex-shrink-0 w-8 h-8 bg-gray-600 rounded flex items-center justify-center">
-                          <span className="text-lg">{item.type === 'image' ? '📷' : '🎥'}</span>
-                        </div>
-
-                        {/* File Name/Title Preview */}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs text-gray-400 truncate" title={item.type === 'image' ? item.image_url : item.url}>
-                            {(() => {
-                              // Extract filename from URL
-                              const url = item.type === 'image' ? item.image_url : item.url;
-                              if (!url) return 'Item';
-
-                              try {
-                                if (url.includes('drive.google.com')) {
-                                  // Extract Drive file ID as identifier
-                                  const idMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
-                                  return idMatch ? `Drive: ${idMatch[1].substring(0, 12)}...` : 'Drive file';
-                                } else if (url.includes('youtube.com') || url.includes('youtu.be')) {
-                                  // For YouTube, show video ID
-                                  const videoIdMatch = url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-                                  return videoIdMatch ? `YT: ${videoIdMatch[1]}` : 'YouTube';
-                                } else {
-                                  // Try to get filename from URL path
-                                  const urlParts = url.split('/');
-                                  const lastPart = urlParts[urlParts.length - 1];
-                                  if (lastPart) {
-                                    // Remove query params and decode
-                                    const fileName = decodeURIComponent(lastPart.split('?')[0]);
-                                    // Truncate if too long
-                                    return fileName.length > 30 ? fileName.substring(0, 27) + '...' : fileName;
-                                  }
-                                }
-                              } catch (e) {
-                                console.warn('Error extracting filename:', e);
-                              }
-                              return 'File';
-                            })()}
-                          </p>
-                        </div>
-
-                        {/* Delete Button */}
-                        <button
-                          onClick={() => handleDeleteItem(index)}
-                          className="flex-shrink-0 px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-xs"
-                        >
-                          ×
-                        </button>
-                      </div>
-
-                      {/* Thumbnail */}
-                      {item.type === 'image' && item.image_url && (
-                        <img
-                          src={`/api/proxy-image?url=${encodeURIComponent(item.image_url)}`}
-                          alt={item.alt_text || `Item ${item.position}`}
-                          className="w-full h-20 object-contain rounded border border-gray-600 mb-2 bg-gray-700"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                          }}
-                        />
-                      )}
-                      {item.type === 'video' && item.video_id && item.video_id.length === 11 && (
-                        <img
-                          src={`https://img.youtube.com/vi/${item.video_id}/mqdefault.jpg`}
-                          alt={item.title || `Video ${item.position}`}
-                          className="w-full h-20 object-contain rounded border border-gray-600 mb-2 bg-gray-700"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                          }}
-                        />
-                      )}
-
-                      {/* Quick Edit Fields */}
-                      {item.type === 'image' && (
-                        <input
-                          type="text"
-                          value={item.alt_text || ''}
-                          onChange={(e) => handleItemChange(index, 'alt_text', e.target.value)}
-                          placeholder="Alt text (optional)"
-                          className="w-full px-2 py-1 bg-gray-600 border border-gray-500 rounded text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        />
-                      )}
-                      {item.type === 'video' && (
-                        <input
-                          type="text"
-                          value={item.title || ''}
-                          onChange={(e) => handleItemChange(index, 'title', e.target.value)}
-                          placeholder="Title (optional)"
-                          className="w-full px-2 py-1 bg-gray-600 border border-gray-500 rounded text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        />
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
+
+            {items.length === 0 ? (
+              <p className="text-gray-400 text-center py-8">
+                No items yet. Click "Import Links" to get started.
+              </p>
+            ) : (
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={items.map((_, i) => i.toString())}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {items.map((item, index) => (
+                    <SortableItemCard
+                      key={index}
+                      id={index.toString()}
+                      item={item}
+                      index={index}
+                      onDelete={() => handleDeleteItem(index)}
+                      onEditTitle={(newTitle) => handleEditItemTitle(index, newTitle)}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
+            )}
           </div>
 
           {/* Actions */}
@@ -1174,6 +1169,63 @@ function NewSequencePageContent() {
           )}
         </div>
       </main>
+
+      {/* Import Links Modal (Bulk URL Import) */}
+      {showImportLinksModal && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-semibold text-white">Import Links</h3>
+              <button
+                onClick={() => {
+                  setShowImportLinksModal(false);
+                  setModalBulkUrls('');
+                }}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Paste URLs (one per line or comma-separated)
+                </label>
+                <textarea
+                  value={modalBulkUrls}
+                  onChange={(e) => setModalBulkUrls(e.target.value)}
+                  placeholder="https://youtube.com/watch?v=VIDEO_ID&#10;https://drive.google.com/file/d/FILE_ID/view&#10;https://i.imgur.com/image.jpg"
+                  className="w-full h-64 px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  autoFocus
+                />
+                <p className="text-xs text-gray-400 mt-2">
+                  💡 Supports YouTube videos, Google Drive images/videos, and direct image URLs
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowImportLinksModal(false);
+                    setModalBulkUrls('');
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleImportFromModal}
+                  disabled={!modalBulkUrls.trim()}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Import
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Import Drive Folder Modal */}
       {showImportModal && (
