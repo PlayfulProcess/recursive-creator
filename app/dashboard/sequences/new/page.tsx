@@ -208,6 +208,9 @@ function NewSequencePageContent() {
   // Track unsaved changes for floating save button
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
+  // Success modal state
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+
   // Available channels for submission (matching channels.recursive.eco header)
   const AVAILABLE_CHANNELS = [
     { id: 'kids-stories', name: 'Community Kids Stories', description: 'Parent-Created Stories for Children' },
@@ -732,6 +735,11 @@ function NewSequencePageContent() {
 
         setSuccess(true);
         setHasUnsavedChanges(false); // Clear unsaved flag after successful save
+
+        // Show success modal if published
+        if (shouldPublish) {
+          setShowSuccessModal(true);
+        }
       } else {
         // CREATE MODE: Insert new project
         const baseSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -794,6 +802,12 @@ function NewSequencePageContent() {
 
         setSuccess(true);
         setHasUnsavedChanges(false); // Clear unsaved flag after successful save
+
+        // Show success modal if published
+        if (shouldPublish) {
+          setShowSuccessModal(true);
+        }
+
         // Transition to edit mode
         router.push(`/dashboard/sequences/new?id=${insertData.id}`);
       }
@@ -982,47 +996,6 @@ function NewSequencePageContent() {
 
           {/* Actions */}
           <div className="bg-gray-800 rounded-lg shadow-lg p-6">
-            {/* Success/Error Notifications */}
-            {success && publishedUrl && (
-              <div className="mb-6 bg-green-900/20 border border-green-500 rounded-lg p-4">
-                <h3 className="text-green-400 font-semibold mb-2">
-                  ✅ Project Published!
-                </h3>
-                <p className="text-sm text-gray-300 mb-3">
-                  Your project is now live. Share this link:
-                </p>
-                <div className="flex items-center gap-2 mb-3">
-                  <input
-                    type="text"
-                    value={publishedUrl}
-                    readOnly
-                    className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white font-mono text-sm"
-                    onClick={(e) => (e.target as HTMLInputElement).select()}
-                  />
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(publishedUrl);
-                      alert('Link copied to clipboard!');
-                    }}
-                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                  >
-                    📋 Copy
-                  </button>
-                  <a
-                    href={publishedUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
-                  >
-                    🔗 View
-                  </a>
-                </div>
-                <p className="text-xs text-gray-500">
-                  ⚠️ This link is public. Anyone with it can view your project.
-                </p>
-              </div>
-            )}
-
             {/* Warning message for reported content */}
             {isReported && (
               <div className="bg-red-900/50 border border-red-700 rounded-lg p-6 mb-6">
@@ -1135,50 +1108,6 @@ function NewSequencePageContent() {
               </div>
             )}
 
-            {/* Success modal with Submit to Community button */}
-            {success && isPublished && publishedUrl && (
-              <div className="mt-6 bg-green-900/50 border border-green-700 rounded-lg p-6">
-                <h3 className="text-xl font-bold text-green-200 mb-3">
-                  🎉 Published Successfully!
-                </h3>
-                <p className="text-gray-300 mb-4">
-                  Your content is now live at:{' '}
-                  <a
-                    href={publishedUrl}
-                    target="_blank"
-                    rel="noopener"
-                    className="text-purple-400 hover:text-purple-300 underline font-semibold break-all"
-                  >
-                    {publishedUrl}
-                  </a>
-                </p>
-
-                {/* Submit to Community Channel button */}
-                <div className="bg-gray-800 border border-purple-700/50 rounded-lg p-4">
-                  <h4 className="font-semibold text-white mb-2">
-                    📢 Share with the Community
-                  </h4>
-                  <p className="text-sm text-gray-300 mb-3">
-                    Submit your content to the Kids Stories channel so other families can discover it!
-                  </p>
-                  <p className="text-xs text-gray-400 mb-3 italic">
-                    💡 You can also share links from trusted sources like Goodreads (book recommendations),
-                    Claude/ChatGPT (AI tools), Amazon (products), or Google Drive (shared files).
-                  </p>
-                  <button
-                    onClick={() => setShowChannelSelectModal(true)}
-                    className="inline-block px-6 py-2 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition-colors"
-                  >
-                    📢 Submit to Channel →
-                  </button>
-                  <p className="text-xs text-gray-500 mt-2">
-                    Opens in channels.recursive.eco with your content pre-filled.
-                    You can review before submitting.
-                  </p>
-                </div>
-              </div>
-            )}
-
             {error && (
               <div className="mt-6 bg-red-900/50 border border-red-700 rounded-lg p-4">
                 <p className="text-red-200">{error}</p>
@@ -1254,6 +1183,77 @@ function NewSequencePageContent() {
                   Import
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Modal - Appears after publishing */}
+      {showSuccessModal && publishedUrl && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg shadow-2xl max-w-lg w-full p-8 border border-green-500/30">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold text-green-400 flex items-center gap-3">
+                <span>🎉</span>
+                Published Successfully!
+              </h3>
+              <button
+                onClick={() => setShowSuccessModal(false)}
+                className="text-gray-400 hover:text-white transition-colors text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Published URL */}
+            <div className="mb-6">
+              <p className="text-gray-300 text-sm mb-3">Your content is now live at:</p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={publishedUrl}
+                  readOnly
+                  className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white font-mono text-sm"
+                  onClick={(e) => (e.target as HTMLInputElement).select()}
+                />
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(publishedUrl);
+                    alert('Link copied!');
+                  }}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+                  title="Copy link"
+                >
+                  📋
+                </button>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="space-y-3">
+              <a
+                href={publishedUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block w-full px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold text-center transition-colors"
+              >
+                🔗 View Published Content
+              </a>
+
+              <button
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  setShowChannelSelectModal(true);
+                }}
+                className="block w-full px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors"
+              >
+                📢 Submit to Channel →
+              </button>
+
+              <p className="text-xs text-gray-400 text-center mt-2">
+                Submit to channels.recursive.eco to share with the community
+              </p>
             </div>
           </div>
         </div>
