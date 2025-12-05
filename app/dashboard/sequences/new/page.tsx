@@ -26,6 +26,13 @@ interface SequenceItem {
   duration_seconds?: number;  // Video duration in seconds
 }
 
+interface VideoMetadata {
+  title: string;
+  creator: string;
+  thumbnail: string;
+  duration_seconds: number;
+}
+
 function NewSequencePageContent() {
   const { user, status } = useAuth();
   const router = useRouter();
@@ -60,7 +67,7 @@ function NewSequencePageContent() {
   const [playlistError, setPlaylistError] = useState<string | null>(null);
 
   // Store video metadata (URL → title mapping) from YouTube API
-  const [videoMetadata, setVideoMetadata] = useState<Map<string, string>>(new Map());
+  const [videoMetadata, setVideoMetadata] = useState<Map<string, VideoMetadata>>(new Map());
 
   // Channel selection modal
   const [showChannelSelectModal, setShowChannelSelectModal] = useState(false);
