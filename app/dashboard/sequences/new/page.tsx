@@ -72,6 +72,9 @@ function NewSequencePageContent() {
   // Channel selection modal
   const [showChannelSelectModal, setShowChannelSelectModal] = useState(false);
 
+  // Position input state (for Enter key handling)
+  const [pendingPositions, setPendingPositions] = useState<{[key: number]: string}>({});
+
   // License agreement
   const [licenseAgreed, setLicenseAgreed] = useState(false);
 
@@ -266,6 +269,31 @@ function NewSequencePageContent() {
     return { type: 'image', processedUrl: trimmedUrl };
   };
 
+  const handleUpdateLinksFromSidebar = () => {
+    // Generate URLs from current items in sidebar
+    const urlList = items.map((item: SequenceItem) => {
+      if (item.type === 'video') {
+        // Check if it's Drive video (longer ID) or YouTube (11 chars)
+        if (item.video_id && item.video_id.length > 11) {
+          // Drive video
+          return `video: https://drive.google.com/file/d/${item.video_id}/view`;
+        } else if (item.url) {
+          // YouTube - use original URL if available
+          return item.url;
+        } else {
+          // YouTube - reconstruct from ID
+          return `https://youtube.com/watch?v=${item.video_id}`;
+        }
+      } else {
+        // Image
+        return item.image_url || '';
+      }
+    }).filter((url: string) => url.trim() !== '');
+
+    setBulkUrls(urlList.join('\n'));
+    setError('✅ Links updated from sidebar');
+  };
+
   const handleParseBulkUrls = () => {
     if (!bulkUrls.trim()) {
       // Empty textarea = clear all items
@@ -293,7 +321,7 @@ function NewSequencePageContent() {
         if (processedUrl.includes('youtube.com') || processedUrl.includes('youtu.be')) {
           const videoId = extractYouTubeId(processedUrl);
           // Check if we have full metadata from YouTube API import
-          const metadata = videoMetadata.get(processedUrl);
+          const metadata: VideoMetadata | undefined = videoMetadata.get(processedUrl);
           newItems.push({
             position: startPosition + index + 1,
             type: 'video',
@@ -772,6 +800,19 @@ function NewSequencePageContent() {
                   <p className="text-xs mt-1">Paste URLs to get started</p>
                 </div>
               ) : (
+                <>
+                  {/* Update Links button */}
+                  <button
+                    onClick={handleUpdateLinksFromSidebar}
+                    className="w-full mb-3 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                  >
+                    ← Update Links
+                  </button>
+
+                </>
+              )}
+
+              {items.length > 0 && (
                 <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
                   {items.map((item, index) => (
                     <div
@@ -784,8 +825,33 @@ function NewSequencePageContent() {
                           type="number"
                           min="1"
                           max={items.length}
-                          value={item.position}
-                          onChange={(e) => handleReorderItem(index, parseInt(e.target.value))}
+                          value={pendingPositions[index] !== undefined ? pendingPositions[index] : item.position}
+                          onChange={(e) => {
+                            // Update local state only, don't move item yet
+                            setPendingPositions(prev => ({ ...prev, [index]: e.target.value }));
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              const newPos = parseInt(pendingPositions[index] || item.position.toString());
+                              if (!isNaN(newPos) && newPos >= 1 && newPos <= items.length) {
+                                handleReorderItem(index, newPos);
+                                // Clear pending state
+                                setPendingPositions(prev => {
+                                  const updated = { ...prev };
+                                  delete updated[index];
+                                  return updated;
+                                });
+                              }
+                            }
+                          }}
+                          onBlur={() => {
+                            // Clear pending state on blur without saving
+                            setPendingPositions(prev => {
+                              const updated = { ...prev };
+                              delete updated[index];
+                              return updated;
+                            });
+                          }}
                           className="w-14 px-2 py-1 bg-gray-600 border border-gray-500 rounded text-white text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
 
