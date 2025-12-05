@@ -651,7 +651,7 @@ function NewSequencePageContent() {
     setItems(newItems);
   };
 
-  const handleSaveDraft = async (forcePublished?: boolean) => {
+  const handleSaveDraft = async (forcePublished?: boolean, silentSave = false) => {
     if (!title.trim()) {
       setError('Title is required');
       return;
@@ -736,8 +736,8 @@ function NewSequencePageContent() {
         setSuccess(true);
         setHasUnsavedChanges(false); // Clear unsaved flag after successful save
 
-        // Show success modal if published
-        if (shouldPublish) {
+        // Show success modal if published (but not for silent saves)
+        if (shouldPublish && !silentSave) {
           setShowSuccessModal(true);
         }
       } else {
@@ -803,8 +803,8 @@ function NewSequencePageContent() {
         setSuccess(true);
         setHasUnsavedChanges(false); // Clear unsaved flag after successful save
 
-        // Show success modal if published
-        if (shouldPublish) {
+        // Show success modal if published (but not for silent saves)
+        if (shouldPublish && !silentSave) {
           setShowSuccessModal(true);
         }
 
@@ -887,7 +887,7 @@ function NewSequencePageContent() {
       {hasUnsavedChanges && !saving && (
         <div className="fixed top-4 right-4 z-50 animate-pulse">
           <button
-            onClick={() => handleSaveDraft()}
+            onClick={() => handleSaveDraft(undefined, true)}
             disabled={saving}
             className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-lg font-semibold transition-all hover:scale-105"
           >
