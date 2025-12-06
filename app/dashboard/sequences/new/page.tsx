@@ -1006,6 +1006,32 @@ function NewSequencePageContent() {
         </div>
       )}
 
+      {/* Floating Expand/Collapse Button */}
+      {items.length > 2 && (
+        <div className="fixed top-20 right-4 z-50">
+          <button
+            onClick={() => setItemsExpanded(!itemsExpanded)}
+            className="flex items-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg shadow-lg font-semibold transition-all hover:scale-105"
+          >
+            {itemsExpanded ? (
+              <>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                </svg>
+                Collapse Items
+              </>
+            ) : (
+              <>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+                Expand All ({items.length})
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-8">
           {/* Metadata */}
@@ -1092,23 +1118,6 @@ function NewSequencePageContent() {
               <h2 className="text-xl font-semibold text-white">
                 Items ({items.length}/{MAX_ITEMS})
               </h2>
-
-              {items.length > 2 && (
-                <button
-                  onClick={() => setItemsExpanded(!itemsExpanded)}
-                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors flex items-center gap-2"
-                >
-                  {itemsExpanded ? (
-                    <>
-                      ⬆ Collapse
-                    </>
-                  ) : (
-                    <>
-                      ⬇ Expand All ({items.length})
-                    </>
-                  )}
-                </button>
-              )}
             </div>
 
             {items.length === 0 ? (
@@ -1142,15 +1151,9 @@ function NewSequencePageContent() {
 
                 {!itemsExpanded && items.length > 2 && (
                   <div className="text-center mt-4 pt-4 border-t border-gray-700">
-                    <p className="text-gray-400 text-sm mb-2">
-                      {items.length - 2} more item{items.length - 2 !== 1 ? 's' : ''} hidden
+                    <p className="text-gray-400 text-sm">
+                      {items.length - 2} more item{items.length - 2 !== 1 ? 's' : ''} hidden. Use the expand button to view all.
                     </p>
-                    <button
-                      onClick={() => setItemsExpanded(true)}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                    >
-                      Show All Items
-                    </button>
                   </div>
                 )}
               </div>
