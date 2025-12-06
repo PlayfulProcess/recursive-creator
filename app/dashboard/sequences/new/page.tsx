@@ -174,6 +174,7 @@ function NewSequencePageContent() {
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [author, setAuthor] = useState('');
   const [items, setItems] = useState<SequenceItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -226,6 +227,9 @@ function NewSequencePageContent() {
   const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
   const [newPosition, setNewPosition] = useState('');
 
+  // Items view expansion state
+  const [itemsExpanded, setItemsExpanded] = useState(false);
+
   // Available channels for submission (matching channels.recursive.eco header)
   const AVAILABLE_CHANNELS = [
     { id: 'kids-stories', name: 'Community Kids Stories', description: 'Parent-Created Stories for Children' },
@@ -255,6 +259,13 @@ function NewSequencePageContent() {
     }
   }, [editingId, user]);
 
+  // Pre-fill author with user email (only for new sequences, not when editing)
+  useEffect(() => {
+    if (user?.email && !editingId && !author) {
+      setAuthor(user.email);
+    }
+  }, [user, editingId, author]);
+
   // Track unsaved changes (but ignore initial load)
   useEffect(() => {
     // Don't mark as unsaved on initial load or during save
@@ -280,6 +291,7 @@ function NewSequencePageContent() {
 
       setTitle(data.document_data.title || '');
       setDescription(data.document_data.description || '');
+      setAuthor(data.document_data.author || user?.email || '');
 
       // Check if published (from document_data.is_published)
       const isPublishedValue = data.document_data.is_published === 'true';
@@ -783,6 +795,7 @@ function NewSequencePageContent() {
             document_data: {
               title: title.trim(),
               description: description.trim(),
+              author: author.trim() || user.email || '',
               reviewed: 'false',
               creator_id: user.id,
               is_published: shouldPublish ? 'true' : 'false',  // ✅ Add this for view.html
@@ -850,6 +863,7 @@ function NewSequencePageContent() {
             document_data: {
               title: title.trim(),
               description: description.trim(),
+              author: author.trim() || user.email || '',
               reviewed: 'false',
               creator_id: user.id,
               is_published: shouldPublish ? 'true' : 'false',  // ✅ Add this for view.html
@@ -1022,6 +1036,22 @@ function NewSequencePageContent() {
                   placeholder="A brief description..."
                 />
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Author
+                </label>
+                <input
+                  type="text"
+                  value={author}
+                  onChange={(e) => setAuthor(e.target.value)}
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Your name or email"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Pre-filled with your email, but you can edit it
+                </p>
+              </div>
             </div>
           </div>
 
@@ -1062,6 +1092,23 @@ function NewSequencePageContent() {
               <h2 className="text-xl font-semibold text-white">
                 Items ({items.length}/{MAX_ITEMS})
               </h2>
+
+              {items.length > 2 && (
+                <button
+                  onClick={() => setItemsExpanded(!itemsExpanded)}
+                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors flex items-center gap-2"
+                >
+                  {itemsExpanded ? (
+                    <>
+                      ⬆ Collapse
+                    </>
+                  ) : (
+                    <>
+                      ⬇ Expand All ({items.length})
+                    </>
+                  )}
+                </button>
+              )}
             </div>
 
             {items.length === 0 ? (
@@ -1069,28 +1116,44 @@ function NewSequencePageContent() {
                 No items yet. Click "Import Links" to get started.
               </p>
             ) : (
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={handleDragEnd}
-              >
-                <SortableContext
-                  items={items.map((_, i) => i.toString())}
-                  strategy={verticalListSortingStrategy}
+              <div className={itemsExpanded ? '' : 'max-h-[400px] overflow-hidden'}>
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
                 >
-                  {items.map((item, index) => (
-                    <SortableItemCard
-                      key={index}
-                      id={index.toString()}
-                      item={item}
-                      index={index}
-                      onDelete={() => handleDeleteItem(index)}
-                      onEditTitle={(newTitle) => handleEditItemTitle(index, newTitle)}
-                      onPositionClick={() => handlePositionClick(index)}
-                    />
-                  ))}
-                </SortableContext>
-              </DndContext>
+                  <SortableContext
+                    items={items.map((_, i) => i.toString())}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {(itemsExpanded ? items : items.slice(0, 2)).map((item, index) => (
+                      <SortableItemCard
+                        key={index}
+                        id={index.toString()}
+                        item={item}
+                        index={index}
+                        onDelete={() => handleDeleteItem(index)}
+                        onEditTitle={(newTitle) => handleEditItemTitle(index, newTitle)}
+                        onPositionClick={() => handlePositionClick(index)}
+                      />
+                    ))}
+                  </SortableContext>
+                </DndContext>
+
+                {!itemsExpanded && items.length > 2 && (
+                  <div className="text-center mt-4 pt-4 border-t border-gray-700">
+                    <p className="text-gray-400 text-sm mb-2">
+                      {items.length - 2} more item{items.length - 2 !== 1 ? 's' : ''} hidden
+                    </p>
+                    <button
+                      onClick={() => setItemsExpanded(true)}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                    >
+                      Show All Items
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
