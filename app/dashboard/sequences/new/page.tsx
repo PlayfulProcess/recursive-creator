@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase-client';
@@ -142,6 +142,11 @@ function SortableItemCard({ id, item, index, onDelete, onEditTitle, onPositionCl
             By: {item.creator}
           </div>
         )}
+        {item.type === 'image' && (
+          <div className="text-gray-400 text-sm truncate">
+            <span className="italic">Author: (sequence author will be used)</span>
+          </div>
+        )}
 
         {/* Inline Title Edit */}
         <input
@@ -169,6 +174,7 @@ function NewSequencePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
+  const itemsContainerRef = useRef<HTMLDivElement>(null);
 
   const editingId = searchParams.get('id');
 
@@ -276,6 +282,19 @@ function NewSequencePageContent() {
       setHasUnsavedChanges(true);
     }
   }, [title, description, items, saving, loading]);
+
+  // Keyboard navigation: CTRL+END to scroll to items container
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === 'End') {
+        e.preventDefault();
+        itemsContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const loadSequence = async (id: string) => {
     setLoading(true);
@@ -720,6 +739,18 @@ function NewSequencePageContent() {
     });
   };
 
+  const handleToggleExpand = () => {
+    const newExpanded = !itemsExpanded;
+    setItemsExpanded(newExpanded);
+
+    // When expanding, scroll to the items container after a brief delay
+    if (newExpanded) {
+      setTimeout(() => {
+        itemsContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    }
+  };
+
   // Position modal handlers
   const handlePositionClick = (index: number) => {
     setSelectedItemIndex(index);
@@ -1010,7 +1041,7 @@ function NewSequencePageContent() {
       {items.length > 2 && (
         <div className="fixed top-20 right-4 z-50">
           <button
-            onClick={() => setItemsExpanded(!itemsExpanded)}
+            onClick={handleToggleExpand}
             className="flex items-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg shadow-lg font-semibold transition-all hover:scale-105"
           >
             {itemsExpanded ? (
@@ -1113,7 +1144,7 @@ function NewSequencePageContent() {
           </div>
 
           {/* Draggable Item Cards */}
-          <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
+          <div ref={itemsContainerRef} className="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-semibold text-white">
                 Items ({items.length}/{MAX_ITEMS})
@@ -1151,9 +1182,32 @@ function NewSequencePageContent() {
 
                 {!itemsExpanded && items.length > 2 && (
                   <div className="text-center mt-4 pt-4 border-t border-gray-700">
-                    <p className="text-gray-400 text-sm">
-                      {items.length - 2} more item{items.length - 2 !== 1 ? 's' : ''} hidden. Use the expand button to view all.
+                    <p className="text-gray-400 text-sm mb-3">
+                      {items.length - 2} more item{items.length - 2 !== 1 ? 's' : ''} hidden
                     </p>
+                    <button
+                      onClick={handleToggleExpand}
+                      className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold transition-colors flex items-center gap-2 mx-auto"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                      Expand All ({items.length})
+                    </button>
+                  </div>
+                )}
+
+                {itemsExpanded && items.length > 2 && (
+                  <div className="text-center mt-4 pt-4 border-t border-gray-700">
+                    <button
+                      onClick={handleToggleExpand}
+                      className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold transition-colors flex items-center gap-2 mx-auto"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                      </svg>
+                      Collapse Items
+                    </button>
                   </div>
                 )}
               </div>
