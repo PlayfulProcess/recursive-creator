@@ -196,6 +196,12 @@ function NewSequencePageContent() {
   const [importingPlaylist, setImportingPlaylist] = useState(false);
   const [playlistError, setPlaylistError] = useState<string | null>(null);
 
+  // YouTube Kids channel import modal
+  const [showKidsChannelModal, setShowKidsChannelModal] = useState(false);
+  const [kidsChannelUrl, setKidsChannelUrl] = useState('');
+  const [importingKidsChannel, setImportingKidsChannel] = useState(false);
+  const [kidsChannelError, setKidsChannelError] = useState<string | null>(null);
+
   // Import Links modal (bulk URL import)
   const [showImportLinksModal, setShowImportLinksModal] = useState(false);
   const [modalBulkUrls, setModalBulkUrls] = useState('');
@@ -537,6 +543,60 @@ function NewSequencePageContent() {
       setPlaylistError(err.message || 'Failed to import playlist');
     } finally {
       setImportingPlaylist(false);
+    }
+  };
+
+  const handleImportKidsChannel = async () => {
+    if (!kidsChannelUrl.trim()) {
+      setKidsChannelError('Please enter a YouTube Kids channel URL');
+      return;
+    }
+
+    setImportingKidsChannel(true);
+    setKidsChannelError(null);
+
+    try {
+      const response = await fetch('/api/extract-youtube-kids-channel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channelUrl: kidsChannelUrl })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to import YouTube Kids channel');
+      }
+
+      // Create items directly from video data
+      const newItems: SequenceItem[] = [];
+      const startPosition = items.length;
+
+      data.videos.forEach((v: any, index: number) => {
+        newItems.push({
+          position: startPosition + index + 1,
+          type: 'video',
+          video_id: v.video_id,
+          url: v.url,
+          title: v.title,
+          thumbnail: v.thumbnail
+        });
+      });
+
+      // Append to items
+      setItems(prev => [...prev, ...newItems]);
+
+      // Close modal
+      setShowKidsChannelModal(false);
+      setKidsChannelUrl('');
+
+      // Show success message
+      setError(`✅ Imported ${data.count} videos from YouTube Kids channel!`);
+
+    } catch (err: any) {
+      setKidsChannelError(err.message || 'Failed to import YouTube Kids channel');
+    } finally {
+      setImportingKidsChannel(false);
     }
   };
 
@@ -986,6 +1046,12 @@ function NewSequencePageContent() {
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
               >
                 🎬 Import Playlist
+              </button>
+              <button
+                onClick={() => setShowKidsChannelModal(true)}
+                className="px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition-colors flex items-center gap-2"
+              >
+                📺 YouTube Kids Channel
               </button>
             </div>
           </div>
@@ -1542,6 +1608,72 @@ function NewSequencePageContent() {
                   <p className="text-sm text-gray-400">{channel.description}</p>
                 </a>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import YouTube Kids Channel Modal */}
+      {showKidsChannelModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg shadow-xl max-w-lg w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-semibold text-white">Import YouTube Kids Channel</h3>
+              <button
+                onClick={() => {
+                  setShowKidsChannelModal(false);
+                  setKidsChannelUrl('');
+                  setKidsChannelError(null);
+                }}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  YouTube Kids Channel URL
+                </label>
+                <input
+                  type="text"
+                  value={kidsChannelUrl}
+                  onChange={(e) => setKidsChannelUrl(e.target.value)}
+                  placeholder="https://www.youtubekids.com/channel/UC..."
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-pink-500"
+                  autoFocus
+                />
+                <p className="text-xs text-gray-400 mt-2">
+                  Paste a YouTube Kids channel URL to import all videos (max 50)
+                </p>
+              </div>
+
+              {kidsChannelError && (
+                <div className="px-4 py-3 bg-red-900/20 border border-red-500 rounded-lg text-red-400 text-sm">
+                  {kidsChannelError}
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowKidsChannelModal(false);
+                    setKidsChannelUrl('');
+                    setKidsChannelError(null);
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleImportKidsChannel}
+                  disabled={importingKidsChannel || !kidsChannelUrl.trim()}
+                  className="flex-1 px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {importingKidsChannel ? 'Importing...' : 'Import Videos'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
