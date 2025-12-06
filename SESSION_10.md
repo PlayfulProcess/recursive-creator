@@ -1,3 +1,7 @@
+New feedback: Ijust found out that if I have a tablet with kids controls, it will need to be Youtube kids links, not Youtube links. So, we will need to be able to import all items from a kids youtube channel and add that as a button. The link is in this format: https://www.youtubekids.com/channel/UCRtrWCTxogJk4iN8vSjXgrg?hl=en-GB
+
+If needed, fetch youtube kids docs to see if and how this is possible. 
+
 # Session 10: Creator UX Improvements
 
 **Date Started:** 2025-12-05
@@ -106,7 +110,7 @@ Priority 2: Core Features (if time permits in this session)
 
 # Notes for extra features:
 
-User original feedback on commit 5fa15fc to main:
+User original feedback on commit 5fa15fc to main1:
 
 I moved the session file to the project root recursive-creator\SESSION_10.md
 

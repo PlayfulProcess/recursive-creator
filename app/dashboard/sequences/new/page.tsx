@@ -437,12 +437,12 @@ function NewSequencePageContent() {
         throw new Error(data.error || 'Failed to import folder');
       }
 
-      // Parse URLs and append directly to items
+      // Parse files and append directly to items
       const newItems: SequenceItem[] = [];
       const startPosition = items.length;
 
-      data.urls.forEach((url: string, index: number) => {
-        const { type, processedUrl } = detectUrlType(url);
+      data.files.forEach((file: { url: string; name: string; mimeType: string }, index: number) => {
+        const { type, processedUrl } = detectUrlType(file.url);
 
         if (type === 'video') {
           if (processedUrl.includes('drive.google.com')) {
@@ -452,7 +452,7 @@ function NewSequencePageContent() {
               type: 'video',
               video_id: driveId,
               url: processedUrl,
-              title: ''
+              title: file.name  // ← Use Drive file name as title
             });
           }
         } else {
@@ -461,7 +461,7 @@ function NewSequencePageContent() {
             position: startPosition + index + 1,
             type: 'image',
             image_url: convertedUrl,
-            alt_text: '',
+            alt_text: file.name,  // ← Use Drive file name as alt text
             narration: ''
           });
         }
