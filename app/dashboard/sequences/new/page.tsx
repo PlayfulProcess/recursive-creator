@@ -180,7 +180,6 @@ function NewSequencePageContent() {
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [author, setAuthor] = useState('');
   const [items, setItems] = useState<SequenceItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -236,6 +235,16 @@ function NewSequencePageContent() {
   // Items view expansion state
   const [itemsExpanded, setItemsExpanded] = useState(false);
 
+  // Optional channel submission fields
+  const [creatorName, setCreatorName] = useState('');
+  const [creatorLink, setCreatorLink] = useState('');
+  const [thumbnailUrl, setThumbnailUrl] = useState('');
+  const [hashtags, setHashtags] = useState<string[]>([]);
+  const [hashtagInput, setHashtagInput] = useState('');
+
+  // Details section expansion state
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
+
   // Available channels for submission (matching channels.recursive.eco header)
   const AVAILABLE_CHANNELS = [
     { id: 'kids-stories', name: 'Community Kids Stories', description: 'Parent-Created Stories for Children' },
@@ -265,12 +274,47 @@ function NewSequencePageContent() {
     }
   }, [editingId, user]);
 
-  // Pre-fill author with user email (only for new sequences, not when editing)
+  // Load draft from localStorage for new sequences (not editing existing)
   useEffect(() => {
-    if (user?.email && !editingId && !author) {
-      setAuthor(user.email);
+    if (!editingId && !loading) {
+      const savedDraft = localStorage.getItem('sequence-draft');
+      if (savedDraft) {
+        try {
+          const draft = JSON.parse(savedDraft);
+          if (draft.title) setTitle(draft.title);
+          if (draft.description) setDescription(draft.description);
+          if (draft.items && draft.items.length > 0) setItems(draft.items);
+          if (draft.creatorName) setCreatorName(draft.creatorName);
+          if (draft.creatorLink) setCreatorLink(draft.creatorLink);
+          if (draft.thumbnailUrl) setThumbnailUrl(draft.thumbnailUrl);
+          if (draft.hashtags) setHashtags(draft.hashtags);
+          console.log('Loaded draft from localStorage');
+        } catch (e) {
+          console.error('Failed to load draft:', e);
+        }
+      }
     }
-  }, [user, editingId, author]);
+  }, [editingId, loading]);
+
+  // Save draft to localStorage when form changes (only for new sequences)
+  useEffect(() => {
+    if (!editingId && !saving && !loading) {
+      const draft = {
+        title,
+        description,
+        items,
+        creatorName,
+        creatorLink,
+        thumbnailUrl,
+        hashtags,
+        savedAt: new Date().toISOString()
+      };
+      // Only save if there's actually content
+      if (title || description || items.length > 0) {
+        localStorage.setItem('sequence-draft', JSON.stringify(draft));
+      }
+    }
+  }, [title, description, items, creatorName, creatorLink, thumbnailUrl, hashtags, editingId, saving, loading]);
 
   // Track unsaved changes (but ignore initial load)
   useEffect(() => {
@@ -310,7 +354,12 @@ function NewSequencePageContent() {
 
       setTitle(data.document_data.title || '');
       setDescription(data.document_data.description || '');
-      setAuthor(data.document_data.author || user?.email || '');
+
+      // Load optional channel submission fields
+      setCreatorName(data.document_data.creator_name || data.document_data.author || '');
+      setCreatorLink(data.document_data.creator_link || '');
+      setThumbnailUrl(data.document_data.thumbnail_url || '');
+      setHashtags(data.document_data.hashtags || []);
 
       // Check if published (from document_data.is_published)
       const isPublishedValue = data.document_data.is_published === 'true';
@@ -707,6 +756,40 @@ function NewSequencePageContent() {
     setError(`✅ Imported ${newItems.length} items!`);
   };
 
+  const handleExportLinks = () => {
+    if (items.length === 0) {
+      setError('No items to export');
+      return;
+    }
+
+    // Generate URLs for all items
+    const urls = items.map(item => {
+      if (item.type === 'video') {
+        // Return original YouTube URL or construct from video_id
+        if (item.url) return item.url;
+        if (item.video_id && item.video_id.length === 11) {
+          return `https://youtube.com/watch?v=${item.video_id}`;
+        }
+        // Drive video
+        return `https://drive.google.com/file/d/${item.video_id}/view`;
+      } else {
+        // Image - return the original URL
+        return item.image_url || '';
+      }
+    }).filter(url => url);
+
+    // Copy to clipboard
+    const exportText = urls.join('\n');
+    navigator.clipboard.writeText(exportText).then(() => {
+      setError(`✅ Copied ${urls.length} links to clipboard!`);
+    }).catch(() => {
+      // Fallback: show in modal
+      setModalBulkUrls(exportText);
+      setShowImportLinksModal(true);
+      setError('Links ready in modal - copy from there');
+    });
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
 
@@ -826,12 +909,16 @@ function NewSequencePageContent() {
             document_data: {
               title: title.trim(),
               description: description.trim(),
-              author: author.trim() || user.email || '',
               reviewed: 'false',
               creator_id: user.id,
-              is_published: shouldPublish ? 'true' : 'false',  // ✅ Add this for view.html
+              is_published: shouldPublish ? 'true' : 'false',
               published_at: shouldPublish ? new Date().toISOString() : null,
-              items: validItems  // Save raw URLs, no proxy wrapping
+              items: validItems,
+              // Channel submission fields
+              creator_name: creatorName.trim() || null,
+              creator_link: creatorLink.trim() || null,
+              thumbnail_url: thumbnailUrl.trim() || null,
+              hashtags: hashtags.length > 0 ? hashtags : null
             }
           })
           .eq('id', editingId)
@@ -872,6 +959,7 @@ function NewSequencePageContent() {
 
         setSuccess(true);
         setHasUnsavedChanges(false); // Clear unsaved flag after successful save
+        localStorage.removeItem('sequence-draft'); // Clear draft after successful save
 
         // Show success modal if published (but not for silent saves)
         if (shouldPublish && !silentSave) {
@@ -890,16 +978,20 @@ function NewSequencePageContent() {
             document_type: 'creative_work',
             tool_slug: 'sequence',
             story_slug: slug,
-            is_public: shouldPublish,  // Keep for backward compatibility
+            is_public: shouldPublish,
             document_data: {
               title: title.trim(),
               description: description.trim(),
-              author: author.trim() || user.email || '',
               reviewed: 'false',
               creator_id: user.id,
-              is_published: shouldPublish ? 'true' : 'false',  // ✅ Add this for view.html
+              is_published: shouldPublish ? 'true' : 'false',
               published_at: shouldPublish ? new Date().toISOString() : null,
-              items: validItems  // Save raw URLs, no proxy wrapping
+              items: validItems,
+              // Channel submission fields
+              creator_name: creatorName.trim() || null,
+              creator_link: creatorLink.trim() || null,
+              thumbnail_url: thumbnailUrl.trim() || null,
+              hashtags: hashtags.length > 0 ? hashtags : null
             }
           })
           .select()
@@ -940,6 +1032,7 @@ function NewSequencePageContent() {
 
         setSuccess(true);
         setHasUnsavedChanges(false); // Clear unsaved flag after successful save
+        localStorage.removeItem('sequence-draft'); // Clear draft after successful save
 
         // Show success modal if published (but not for silent saves)
         if (shouldPublish && !silentSave) {
@@ -1009,6 +1102,7 @@ function NewSequencePageContent() {
       if (insertError) throw insertError;
 
       setSuccess(true);
+      localStorage.removeItem('sequence-draft'); // Clear draft after successful save
       // Redirect to edit the new project
       router.push(`/dashboard/sequences/new?id=${insertData.id}`);
     } catch (err) {
@@ -1081,46 +1175,181 @@ function NewSequencePageContent() {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Description
-                </label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={2}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="A brief description..."
-                />
-              </div>
+              {/* Collapsible Details Section */}
+              <div className="border border-gray-700 rounded-lg">
+                <button
+                  onClick={() => setDetailsExpanded(!detailsExpanded)}
+                  className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-700/50 transition-colors rounded-lg"
+                >
+                  <span className="text-sm font-medium text-gray-300 flex items-center gap-2">
+                    <span>📝</span>
+                    Description & Optional Details
+                    {(description || creatorName || creatorLink || thumbnailUrl || hashtags.length > 0) && (
+                      <span className="text-xs text-green-400">(has content)</span>
+                    )}
+                  </span>
+                  <svg
+                    className={`w-5 h-5 text-gray-400 transition-transform ${detailsExpanded ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Author
-                </label>
-                <input
-                  type="text"
-                  value={author}
-                  onChange={(e) => setAuthor(e.target.value)}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Your name or email"
-                />
-                <p className="text-xs text-gray-400 mt-1">
-                  Pre-filled with your email, but you can edit it
-                </p>
+                {detailsExpanded && (
+                  <div className="px-4 pb-4 space-y-4">
+                    {/* Description */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Description
+                      </label>
+                      <textarea
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        rows={2}
+                        className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="A brief description..."
+                      />
+                    </div>
+
+                    {/* Optional Fields Info */}
+                    <div className="bg-blue-900/20 border border-blue-700/30 rounded-lg p-3">
+                      <p className="text-xs text-blue-300">
+                        💡 These fields are optional but helpful when submitting to community channels.
+                      </p>
+                    </div>
+
+                    {/* Creator Name */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Creator Display Name
+                      </label>
+                      <input
+                        type="text"
+                        value={creatorName}
+                        onChange={(e) => setCreatorName(e.target.value)}
+                        className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="How you'd like to be credited"
+                      />
+                    </div>
+
+                    {/* Creator Link */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Creator Link (optional)
+                      </label>
+                      <input
+                        type="url"
+                        value={creatorLink}
+                        onChange={(e) => setCreatorLink(e.target.value)}
+                        className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="https://your-website.com"
+                      />
+                    </div>
+
+                    {/* Thumbnail URL */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Thumbnail URL (optional)
+                      </label>
+                      <input
+                        type="url"
+                        value={thumbnailUrl}
+                        onChange={(e) => setThumbnailUrl(e.target.value)}
+                        className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="https://drive.google.com/... or image URL"
+                      />
+                      {thumbnailUrl && (
+                        <div className="mt-2">
+                          <img
+                            src={`/api/proxy-image?url=${encodeURIComponent(thumbnailUrl)}`}
+                            alt="Thumbnail preview"
+                            className="h-20 w-auto rounded border border-gray-600"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Hashtags */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Hashtags (1-5 recommended for channels)
+                      </label>
+                      <div className="flex gap-2 mb-2">
+                        <input
+                          type="text"
+                          value={hashtagInput}
+                          onChange={(e) => setHashtagInput(e.target.value.replace(/[^a-zA-Z0-9]/g, ''))}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && hashtagInput.trim() && hashtags.length < 5) {
+                              e.preventDefault();
+                              setHashtags([...hashtags, hashtagInput.trim().toLowerCase()]);
+                              setHashtagInput('');
+                            }
+                          }}
+                          className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Type and press Enter"
+                          disabled={hashtags.length >= 5}
+                        />
+                        <button
+                          onClick={() => {
+                            if (hashtagInput.trim() && hashtags.length < 5) {
+                              setHashtags([...hashtags, hashtagInput.trim().toLowerCase()]);
+                              setHashtagInput('');
+                            }
+                          }}
+                          disabled={!hashtagInput.trim() || hashtags.length >= 5}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Add
+                        </button>
+                      </div>
+                      {hashtags.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {hashtags.map((tag, index) => (
+                            <span
+                              key={index}
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-purple-600/30 text-purple-300 rounded-full text-sm"
+                            >
+                              #{tag}
+                              <button
+                                onClick={() => setHashtags(hashtags.filter((_, i) => i !== index))}
+                                className="ml-1 text-purple-400 hover:text-white"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Import Content Buttons */}
+          {/* Import/Export Content Buttons */}
           <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
-            <h2 className="text-xl font-semibold text-white mb-4">Import Content</h2>
+            <h2 className="text-xl font-semibold text-white mb-4">Import / Export</h2>
             <div className="flex flex-wrap gap-3">
               <button
                 onClick={() => setShowImportLinksModal(true)}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
               >
                 📋 Import Links
+              </button>
+              <button
+                onClick={handleExportLinks}
+                disabled={items.length === 0}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+              >
+                📤 Export Links
               </button>
               <button
                 onClick={() => setShowImportModal(true)}
@@ -1715,19 +1944,32 @@ function NewSequencePageContent() {
             </p>
 
             <div className="space-y-3">
-              {AVAILABLE_CHANNELS.map((channel) => (
-                <a
-                  key={channel.id}
-                  href={`https://channels.recursive.eco/channels/${channel.id}?doc_id=${publishedDocId}&channel=${channel.id}`}
-                  target="_blank"
-                  rel="noopener"
-                  onClick={() => setShowChannelSelectModal(false)}
-                  className="block w-full text-left p-4 bg-gray-700 hover:bg-gray-600 rounded-lg border border-gray-600 hover:border-purple-500 transition-all"
-                >
-                  <h4 className="font-semibold text-white mb-1">{channel.name}</h4>
-                  <p className="text-sm text-gray-400">{channel.description}</p>
-                </a>
-              ))}
+              {AVAILABLE_CHANNELS.map((channel) => {
+                // Build URL with all submission fields
+                const params = new URLSearchParams();
+                params.set('doc_id', publishedDocId || '');
+                params.set('channel', channel.id);
+                params.set('title', title);
+                if (description) params.set('description', description);
+                if (creatorName) params.set('creator_name', creatorName);
+                if (creatorLink) params.set('creator_link', creatorLink);
+                if (thumbnailUrl) params.set('thumbnail_url', thumbnailUrl);
+                if (hashtags.length > 0) params.set('hashtags', hashtags.join(','));
+
+                return (
+                  <a
+                    key={channel.id}
+                    href={`https://channels.recursive.eco/channels/${channel.id}?${params.toString()}`}
+                    target="_blank"
+                    rel="noopener"
+                    onClick={() => setShowChannelSelectModal(false)}
+                    className="block w-full text-left p-4 bg-gray-700 hover:bg-gray-600 rounded-lg border border-gray-600 hover:border-purple-500 transition-all"
+                  >
+                    <h4 className="font-semibold text-white mb-1">{channel.name}</h4>
+                    <p className="text-sm text-gray-400">{channel.description}</p>
+                  </a>
+                );
+              })}
             </div>
           </div>
         </div>
