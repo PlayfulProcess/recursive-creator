@@ -115,18 +115,31 @@ export default function SequenceCard(props: SequenceCardProps) {
 
   // Get a raw (non-proxied) thumbnail URL for channel submission
   const getRawThumbnailForSubmission = (): string | null => {
-    if (thumbnail_url) return thumbnail_url;
+    if (thumbnail_url) {
+      console.log('Using explicit thumbnail_url:', thumbnail_url);
+      return thumbnail_url;
+    }
 
     // Fallback to first item's thumbnail
     if (items && items.length > 0) {
+      console.log('Looking for thumbnail in items:', items.length, 'items');
+
       const firstImage = items.find(item => item.type === 'image' && item.image_url);
-      if (firstImage?.image_url) return firstImage.image_url;
+      if (firstImage?.image_url) {
+        console.log('Using first image:', firstImage.image_url);
+        return firstImage.image_url;
+      }
 
       const firstVideo = items.find(item => item.type === 'video' && item.video_id);
-      if (firstVideo?.video_id && firstVideo.video_id.length === 11) {
-        return `https://img.youtube.com/vi/${firstVideo.video_id}/mqdefault.jpg`;
+      if (firstVideo?.video_id) {
+        // Don't require exact 11 chars - YouTube IDs can vary
+        const ytThumb = `https://img.youtube.com/vi/${firstVideo.video_id}/mqdefault.jpg`;
+        console.log('Using YouTube thumbnail:', ytThumb);
+        return ytThumb;
       }
     }
+
+    console.log('No thumbnail found for submission');
     return null;
   };
 

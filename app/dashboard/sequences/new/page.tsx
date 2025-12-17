@@ -355,46 +355,52 @@ function NewSequencePageContent() {
       setTitle(data.document_data.title || '');
       setDescription(data.document_data.description || '');
 
-      // Load optional channel submission fields from user_documents
-      let creatorNameValue = data.document_data.creator_name || data.document_data.author || '';
-      let creatorLinkValue = data.document_data.creator_link || '';
-      let thumbnailUrlValue = data.document_data.thumbnail_url || '';
-      let hashtagsValue = data.document_data.hashtags || [];
+      // Load channel fields - check tools table FIRST (most recent), then fall back to user_documents
+      let creatorNameValue = '';
+      let creatorLinkValue = '';
+      let thumbnailUrlValue = '';
+      let hashtagsValue: string[] = [];
 
-      console.log('Loading channel fields from user_documents:', {
+      // Step 1: Try to get from tools table (channel submissions have most recent data)
+      const { data: toolsData } = await supabase
+        .from('tools')
+        .select('tool_data')
+        .ilike('tool_data->>url', `%${id}%`)
+        .eq('tool_data->>is_active', 'true')
+        .limit(1)
+        .single();
+
+      if (toolsData?.tool_data) {
+        console.log('Found channel submission data (priority):', toolsData.tool_data);
+        creatorNameValue = toolsData.tool_data.submitted_by || '';
+        thumbnailUrlValue = toolsData.tool_data.thumbnail || '';
+        if (toolsData.tool_data.hashtags) {
+          hashtagsValue = Array.isArray(toolsData.tool_data.hashtags)
+            ? toolsData.tool_data.hashtags
+            : toolsData.tool_data.hashtags.split(',').map((h: string) => h.trim());
+        }
+      }
+
+      // Step 2: Fall back to user_documents for any missing fields
+      if (!creatorNameValue) {
+        creatorNameValue = data.document_data.creator_name || data.document_data.author || '';
+      }
+      if (!creatorLinkValue) {
+        creatorLinkValue = data.document_data.creator_link || '';
+      }
+      if (!thumbnailUrlValue) {
+        thumbnailUrlValue = data.document_data.thumbnail_url || '';
+      }
+      if (!hashtagsValue.length) {
+        hashtagsValue = data.document_data.hashtags || [];
+      }
+
+      console.log('Final channel fields (tools → user_documents fallback):', {
         creator_name: creatorNameValue,
         creator_link: creatorLinkValue,
         thumbnail_url: thumbnailUrlValue,
         hashtags: hashtagsValue
       });
-
-      // If channel fields are empty, try to sync from tools table (channel submissions)
-      if (!creatorNameValue || !hashtagsValue.length) {
-        const { data: toolsData } = await supabase
-          .from('tools')
-          .select('tool_data')
-          .ilike('tool_data->>url', `%${id}%`)
-          .eq('tool_data->>is_active', 'true')
-          .limit(1)
-          .single();
-
-        if (toolsData?.tool_data) {
-          console.log('Found channel submission data:', toolsData.tool_data);
-          // Sync missing fields from tools table
-          if (!creatorNameValue && toolsData.tool_data.submitted_by) {
-            creatorNameValue = toolsData.tool_data.submitted_by;
-          }
-          if (!thumbnailUrlValue && toolsData.tool_data.thumbnail) {
-            thumbnailUrlValue = toolsData.tool_data.thumbnail;
-          }
-          if (!hashtagsValue.length && toolsData.tool_data.hashtags) {
-            // hashtags might be comma-separated string or array
-            hashtagsValue = Array.isArray(toolsData.tool_data.hashtags)
-              ? toolsData.tool_data.hashtags
-              : toolsData.tool_data.hashtags.split(',').map((h: string) => h.trim());
-          }
-        }
-      }
 
       setCreatorName(creatorNameValue);
       setCreatorLink(creatorLinkValue);
