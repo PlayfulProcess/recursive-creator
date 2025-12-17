@@ -14,7 +14,7 @@ interface SequenceItem {
 const AVAILABLE_CHANNELS = [
   { id: 'kids-stories', name: 'Kids Stories', icon: '📚' },
   { id: 'wellness', name: 'Wellness', icon: '🧘' },
-  { id: 'learning', name: 'Learning', icon: '📖' },
+  { id: 'resources', name: 'Resources for Parents', icon: '📖' },
 ];
 
 interface SequenceCardProps {
@@ -30,6 +30,7 @@ interface SequenceCardProps {
   hashtags?: string[];
   creator_name?: string;
   creator_link?: string;
+  submitted_channels?: string[];  // Channel slugs where this is submitted
   onDelete: (id: string) => void;
   onUnsubmit: (id: string) => void;
   onPublish: (id: string) => void;
@@ -81,6 +82,7 @@ export default function SequenceCard(props: SequenceCardProps) {
     onUnsubmit,
     onPublish,
     onDuplicate,
+    submitted_channels,
   } = props;
 
   const router = useRouter();
@@ -111,6 +113,23 @@ export default function SequenceCard(props: SequenceCardProps) {
     }
   };
 
+  // Get a raw (non-proxied) thumbnail URL for channel submission
+  const getRawThumbnailForSubmission = (): string | null => {
+    if (thumbnail_url) return thumbnail_url;
+
+    // Fallback to first item's thumbnail
+    if (items && items.length > 0) {
+      const firstImage = items.find(item => item.type === 'image' && item.image_url);
+      if (firstImage?.image_url) return firstImage.image_url;
+
+      const firstVideo = items.find(item => item.type === 'video' && item.video_id);
+      if (firstVideo?.video_id && firstVideo.video_id.length === 11) {
+        return `https://img.youtube.com/vi/${firstVideo.video_id}/mqdefault.jpg`;
+      }
+    }
+    return null;
+  };
+
   const buildChannelSubmitUrl = (channelId: string) => {
     const params = new URLSearchParams();
     params.set('doc_id', id);
@@ -119,9 +138,18 @@ export default function SequenceCard(props: SequenceCardProps) {
     if (description) params.set('description', description);
     if (creator_name) params.set('creator_name', creator_name);
     if (creator_link) params.set('creator_link', creator_link);
-    if (thumbnail_url) params.set('thumbnail_url', thumbnail_url);
+
+    // Use thumbnail_url or fallback to first item's thumbnail
+    const thumbForSubmission = getRawThumbnailForSubmission();
+    if (thumbForSubmission) params.set('thumbnail_url', thumbForSubmission);
+
     if (hashtags && hashtags.length > 0) params.set('hashtags', hashtags.join(','));
     return `https://channels.recursive.eco/channels/${channelId}?${params.toString()}`;
+  };
+
+  // Get channel display info
+  const getChannelInfo = (slug: string) => {
+    return AVAILABLE_CHANNELS.find(ch => ch.id === slug) || { name: slug, icon: '📁' };
   };
 
   const handleCardClick = () => {
@@ -165,8 +193,21 @@ export default function SequenceCard(props: SequenceCardProps) {
         </span>
 
         {/* Status badge on thumbnail */}
-        <div className="absolute top-2 left-2">
+        <div className="absolute top-2 left-2 flex flex-col gap-1">
           {getStatusBadge()}
+          {/* Channel badges */}
+          {submitted_channels && submitted_channels.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {submitted_channels.map((ch) => {
+                const channelInfo = getChannelInfo(ch);
+                return (
+                  <span key={ch} className="text-xs px-2 py-0.5 rounded bg-blue-600/30 text-blue-300">
+                    {channelInfo.icon} {channelInfo.name}
+                  </span>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Hover overlay */}

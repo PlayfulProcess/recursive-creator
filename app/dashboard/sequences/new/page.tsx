@@ -355,17 +355,51 @@ function NewSequencePageContent() {
       setTitle(data.document_data.title || '');
       setDescription(data.document_data.description || '');
 
-      // Load optional channel submission fields
-      console.log('Loading channel fields from DB:', {
-        creator_name: data.document_data.creator_name,
-        creator_link: data.document_data.creator_link,
-        thumbnail_url: data.document_data.thumbnail_url,
-        hashtags: data.document_data.hashtags
+      // Load optional channel submission fields from user_documents
+      let creatorNameValue = data.document_data.creator_name || data.document_data.author || '';
+      let creatorLinkValue = data.document_data.creator_link || '';
+      let thumbnailUrlValue = data.document_data.thumbnail_url || '';
+      let hashtagsValue = data.document_data.hashtags || [];
+
+      console.log('Loading channel fields from user_documents:', {
+        creator_name: creatorNameValue,
+        creator_link: creatorLinkValue,
+        thumbnail_url: thumbnailUrlValue,
+        hashtags: hashtagsValue
       });
-      setCreatorName(data.document_data.creator_name || data.document_data.author || '');
-      setCreatorLink(data.document_data.creator_link || '');
-      setThumbnailUrl(data.document_data.thumbnail_url || '');
-      setHashtags(data.document_data.hashtags || []);
+
+      // If channel fields are empty, try to sync from tools table (channel submissions)
+      if (!creatorNameValue || !hashtagsValue.length) {
+        const { data: toolsData } = await supabase
+          .from('tools')
+          .select('tool_data')
+          .ilike('tool_data->>url', `%${id}%`)
+          .eq('tool_data->>is_active', 'true')
+          .limit(1)
+          .single();
+
+        if (toolsData?.tool_data) {
+          console.log('Found channel submission data:', toolsData.tool_data);
+          // Sync missing fields from tools table
+          if (!creatorNameValue && toolsData.tool_data.submitted_by) {
+            creatorNameValue = toolsData.tool_data.submitted_by;
+          }
+          if (!thumbnailUrlValue && toolsData.tool_data.thumbnail) {
+            thumbnailUrlValue = toolsData.tool_data.thumbnail;
+          }
+          if (!hashtagsValue.length && toolsData.tool_data.hashtags) {
+            // hashtags might be comma-separated string or array
+            hashtagsValue = Array.isArray(toolsData.tool_data.hashtags)
+              ? toolsData.tool_data.hashtags
+              : toolsData.tool_data.hashtags.split(',').map((h: string) => h.trim());
+          }
+        }
+      }
+
+      setCreatorName(creatorNameValue);
+      setCreatorLink(creatorLinkValue);
+      setThumbnailUrl(thumbnailUrlValue);
+      setHashtags(hashtagsValue);
 
       // Check if published (from document_data.is_published)
       const isPublishedValue = data.document_data.is_published === 'true';

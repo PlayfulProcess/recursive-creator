@@ -29,6 +29,7 @@ interface Sequence {
     creator_link?: string;
   };
   created_at: string;
+  submitted_channels?: string[];  // Added: channels where this is submitted
 }
 
 export default function DashboardPage() {
@@ -55,6 +56,7 @@ export default function DashboardPage() {
     if (!user) return;
 
     try {
+      // Fetch user's sequences
       const { data, error } = await supabase
         .from('user_documents')
         .select('*')
@@ -64,7 +66,39 @@ export default function DashboardPage() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setSequences(data || []);
+
+      // Fetch all active channel submissions for user's sequences
+      const { data: toolsData } = await supabase
+        .from('tools')
+        .select('tool_data, channel_id')
+        .eq('tool_data->>is_active', 'true');
+
+      // Create a map of doc_id -> channel slugs
+      const channelMap: Record<string, string[]> = {};
+      if (toolsData) {
+        for (const tool of toolsData) {
+          const url = tool.tool_data?.url || '';
+          // Extract doc ID from URL like https://recursive.eco/view/{doc_id}
+          const match = url.match(/\/view\/([a-f0-9-]+)/i);
+          if (match) {
+            const docId = match[1];
+            if (!channelMap[docId]) channelMap[docId] = [];
+            // Get channel slug from channel_id
+            const channelSlug = tool.channel_id;
+            if (channelSlug && !channelMap[docId].includes(channelSlug)) {
+              channelMap[docId].push(channelSlug);
+            }
+          }
+        }
+      }
+
+      // Add submitted_channels to each sequence
+      const sequencesWithChannels = (data || []).map(seq => ({
+        ...seq,
+        submitted_channels: channelMap[seq.id] || []
+      }));
+
+      setSequences(sequencesWithChannels);
     } catch (err) {
       console.error('Error fetching sequences:', err);
     } finally {
@@ -316,6 +350,7 @@ export default function DashboardPage() {
                 hashtags={sequence.document_data.hashtags}
                 creator_name={sequence.document_data.creator_name}
                 creator_link={sequence.document_data.creator_link}
+                submitted_channels={sequence.submitted_channels}
                 onDelete={handleDeleteSequence}
                 onUnsubmit={handleUnsubmitFromChannels}
                 onPublish={handlePublishSequence}
