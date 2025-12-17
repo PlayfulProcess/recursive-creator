@@ -1352,6 +1352,19 @@ function NewSequencePageContent() {
                 📤 Export Links
               </button>
               <button
+                onClick={() => {
+                  if (items.length === 0) return;
+                  if (confirm(`Delete all ${items.length} items? This cannot be undone.`)) {
+                    setItems([]);
+                    setError(`✅ Deleted all items`);
+                  }
+                }}
+                disabled={items.length === 0}
+                className="px-4 py-2 bg-red-600/20 text-red-400 rounded-lg hover:bg-red-600/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+              >
+                🗑️ Delete All
+              </button>
+              <button
                 onClick={() => setShowImportModal(true)}
                 className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
               >
