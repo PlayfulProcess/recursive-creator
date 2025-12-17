@@ -55,7 +55,7 @@ https://channels.recursive.eco/channels/kids-stories?doc_id=xxx&title=xxx&descri
 
 ---
 
-## Phase 2: Dashboard Card Grid View (TODO)
+## Phase 2: Dashboard Card Grid View (COMPLETE)
 
 ### Goal
 Make the dashboard display playlists like channels do - as visual cards instead of a list.
@@ -356,10 +356,11 @@ Let users create their own "channels" that work like shareable playlists.
 - [x] localStorage draft persistence
 - [x] Pass all fields to channels via URL params
 
-### Next (Phase 2)
-- [ ] Card grid view for dashboard
-- [ ] Thumbnail display
-- [ ] Better visual hierarchy
+### Now (Phase 2) - DONE
+- [x] Card grid view for dashboard
+- [x] Thumbnail display (auto-detect from first image/video or explicit thumbnail_url)
+- [x] Better visual hierarchy (responsive grid, hover effects, status badges)
+- [x] SequenceCard component with hashtags, dates, copy URL
 
 ### Later (Phase 3-4)
 - [ ] Starred items tracking
