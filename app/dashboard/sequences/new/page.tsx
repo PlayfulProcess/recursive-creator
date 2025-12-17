@@ -236,6 +236,16 @@ function NewSequencePageContent() {
   // Items view expansion state
   const [itemsExpanded, setItemsExpanded] = useState(false);
 
+  // Optional channel submission fields
+  const [creatorName, setCreatorName] = useState('');
+  const [creatorLink, setCreatorLink] = useState('');
+  const [thumbnailUrl, setThumbnailUrl] = useState('');
+  const [hashtags, setHashtags] = useState<string[]>([]);
+  const [hashtagInput, setHashtagInput] = useState('');
+
+  // Details section expansion state
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
+
   // Available channels for submission (matching channels.recursive.eco header)
   const AVAILABLE_CHANNELS = [
     { id: 'kids-stories', name: 'Community Kids Stories', description: 'Parent-Created Stories for Children' },
@@ -311,6 +321,12 @@ function NewSequencePageContent() {
       setTitle(data.document_data.title || '');
       setDescription(data.document_data.description || '');
       setAuthor(data.document_data.author || user?.email || '');
+
+      // Load optional channel submission fields
+      setCreatorName(data.document_data.creator_name || '');
+      setCreatorLink(data.document_data.creator_link || '');
+      setThumbnailUrl(data.document_data.thumbnail_url || '');
+      setHashtags(data.document_data.hashtags || []);
 
       // Check if published (from document_data.is_published)
       const isPublishedValue = data.document_data.is_published === 'true';
@@ -831,7 +847,12 @@ function NewSequencePageContent() {
               creator_id: user.id,
               is_published: shouldPublish ? 'true' : 'false',  // ✅ Add this for view.html
               published_at: shouldPublish ? new Date().toISOString() : null,
-              items: validItems  // Save raw URLs, no proxy wrapping
+              items: validItems,  // Save raw URLs, no proxy wrapping
+              // Optional channel submission fields
+              creator_name: creatorName.trim() || null,
+              creator_link: creatorLink.trim() || null,
+              thumbnail_url: thumbnailUrl.trim() || null,
+              hashtags: hashtags.length > 0 ? hashtags : null
             }
           })
           .eq('id', editingId)
@@ -899,7 +920,12 @@ function NewSequencePageContent() {
               creator_id: user.id,
               is_published: shouldPublish ? 'true' : 'false',  // ✅ Add this for view.html
               published_at: shouldPublish ? new Date().toISOString() : null,
-              items: validItems  // Save raw URLs, no proxy wrapping
+              items: validItems,  // Save raw URLs, no proxy wrapping
+              // Optional channel submission fields
+              creator_name: creatorName.trim() || null,
+              creator_link: creatorLink.trim() || null,
+              thumbnail_url: thumbnailUrl.trim() || null,
+              hashtags: hashtags.length > 0 ? hashtags : null
             }
           })
           .select()
@@ -1083,19 +1109,6 @@ function NewSequencePageContent() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Description
-                </label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={2}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="A brief description..."
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
                   Author
                 </label>
                 <input
@@ -1108,6 +1121,163 @@ function NewSequencePageContent() {
                 <p className="text-xs text-gray-400 mt-1">
                   Pre-filled with your email, but you can edit it
                 </p>
+              </div>
+
+              {/* Collapsible Details Section */}
+              <div className="border border-gray-700 rounded-lg">
+                <button
+                  onClick={() => setDetailsExpanded(!detailsExpanded)}
+                  className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-700/50 transition-colors rounded-lg"
+                >
+                  <span className="text-sm font-medium text-gray-300 flex items-center gap-2">
+                    <span>📝</span>
+                    Description & Optional Details
+                    {(description || creatorName || creatorLink || thumbnailUrl || hashtags.length > 0) && (
+                      <span className="text-xs text-green-400">(has content)</span>
+                    )}
+                  </span>
+                  <svg
+                    className={`w-5 h-5 text-gray-400 transition-transform ${detailsExpanded ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {detailsExpanded && (
+                  <div className="px-4 pb-4 space-y-4">
+                    {/* Description */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Description
+                      </label>
+                      <textarea
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        rows={2}
+                        className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="A brief description..."
+                      />
+                    </div>
+
+                    {/* Optional Fields Info */}
+                    <div className="bg-blue-900/20 border border-blue-700/30 rounded-lg p-3">
+                      <p className="text-xs text-blue-300">
+                        💡 These fields are optional but helpful when submitting to community channels.
+                      </p>
+                    </div>
+
+                    {/* Creator Name */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Creator Display Name
+                      </label>
+                      <input
+                        type="text"
+                        value={creatorName}
+                        onChange={(e) => setCreatorName(e.target.value)}
+                        className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="How you'd like to be credited"
+                      />
+                    </div>
+
+                    {/* Creator Link */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Creator Link (optional)
+                      </label>
+                      <input
+                        type="url"
+                        value={creatorLink}
+                        onChange={(e) => setCreatorLink(e.target.value)}
+                        className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="https://your-website.com"
+                      />
+                    </div>
+
+                    {/* Thumbnail URL */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Thumbnail URL (optional)
+                      </label>
+                      <input
+                        type="url"
+                        value={thumbnailUrl}
+                        onChange={(e) => setThumbnailUrl(e.target.value)}
+                        className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="https://drive.google.com/... or image URL"
+                      />
+                      {thumbnailUrl && (
+                        <div className="mt-2">
+                          <img
+                            src={`/api/proxy-image?url=${encodeURIComponent(thumbnailUrl)}`}
+                            alt="Thumbnail preview"
+                            className="h-20 w-auto rounded border border-gray-600"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Hashtags */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Hashtags (1-5 recommended for channels)
+                      </label>
+                      <div className="flex gap-2 mb-2">
+                        <input
+                          type="text"
+                          value={hashtagInput}
+                          onChange={(e) => setHashtagInput(e.target.value.replace(/[^a-zA-Z0-9]/g, ''))}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && hashtagInput.trim() && hashtags.length < 5) {
+                              e.preventDefault();
+                              setHashtags([...hashtags, hashtagInput.trim().toLowerCase()]);
+                              setHashtagInput('');
+                            }
+                          }}
+                          className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Type and press Enter"
+                          disabled={hashtags.length >= 5}
+                        />
+                        <button
+                          onClick={() => {
+                            if (hashtagInput.trim() && hashtags.length < 5) {
+                              setHashtags([...hashtags, hashtagInput.trim().toLowerCase()]);
+                              setHashtagInput('');
+                            }
+                          }}
+                          disabled={!hashtagInput.trim() || hashtags.length >= 5}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Add
+                        </button>
+                      </div>
+                      {hashtags.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {hashtags.map((tag, index) => (
+                            <span
+                              key={index}
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-purple-600/30 text-purple-300 rounded-full text-sm"
+                            >
+                              #{tag}
+                              <button
+                                onClick={() => setHashtags(hashtags.filter((_, i) => i !== index))}
+                                className="ml-1 text-purple-400 hover:text-white"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
