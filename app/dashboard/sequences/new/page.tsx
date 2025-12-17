@@ -356,6 +356,12 @@ function NewSequencePageContent() {
       setDescription(data.document_data.description || '');
 
       // Load optional channel submission fields
+      console.log('Loading channel fields from DB:', {
+        creator_name: data.document_data.creator_name,
+        creator_link: data.document_data.creator_link,
+        thumbnail_url: data.document_data.thumbnail_url,
+        hashtags: data.document_data.hashtags
+      });
       setCreatorName(data.document_data.creator_name || data.document_data.author || '');
       setCreatorLink(data.document_data.creator_link || '');
       setThumbnailUrl(data.document_data.thumbnail_url || '');
@@ -1122,9 +1128,9 @@ function NewSequencePageContent() {
 
   return (
     <div className="min-h-screen bg-gray-900">
-      {/* Floating Save Button */}
+      {/* Floating Save Button - Centered on mobile, right on desktop */}
       {hasUnsavedChanges && !saving && (
-        <div className="fixed top-4 right-4 z-50 animate-pulse">
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 sm:left-auto sm:translate-x-0 sm:right-4 z-50 animate-pulse">
           <button
             onClick={() => handleSaveDraft(undefined, true)}
             disabled={saving}

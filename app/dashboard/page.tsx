@@ -201,6 +201,53 @@ export default function DashboardPage() {
     }
   };
 
+  const handleDuplicateSequence = async (sequenceId: string) => {
+    try {
+      // Fetch the original sequence
+      const { data: original, error: fetchError } = await supabase
+        .from('user_documents')
+        .select('*')
+        .eq('id', sequenceId)
+        .eq('user_id', user!.id)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Create new slug with timestamp
+      const baseSlug = (original.document_data.title || 'untitled')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+      const timestamp = Date.now();
+      const newSlug = `${baseSlug}-copy-${timestamp}`;
+
+      // Insert duplicate (unpublished)
+      const { error: insertError } = await supabase
+        .from('user_documents')
+        .insert({
+          user_id: user!.id,
+          document_type: original.document_type,
+          tool_slug: original.tool_slug,
+          story_slug: newSlug,
+          is_public: false,
+          document_data: {
+            ...original.document_data,
+            title: `${original.document_data.title || 'Untitled'} (Copy)`,
+            is_published: 'false',
+            published_at: null
+          }
+        });
+
+      if (insertError) throw insertError;
+
+      alert('Project duplicated! The copy is saved as a draft.');
+      fetchSequences();
+    } catch (err) {
+      console.error('Error duplicating sequence:', err);
+      alert('Failed to duplicate project. Please try again.');
+    }
+  };
+
   if (status === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-900">
@@ -272,6 +319,7 @@ export default function DashboardPage() {
                 onDelete={handleDeleteSequence}
                 onUnsubmit={handleUnsubmitFromChannels}
                 onPublish={handlePublishSequence}
+                onDuplicate={handleDuplicateSequence}
               />
             ))}
           </div>

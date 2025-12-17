@@ -33,6 +33,7 @@ interface SequenceCardProps {
   onDelete: (id: string) => void;
   onUnsubmit: (id: string) => void;
   onPublish: (id: string) => void;
+  onDuplicate: (id: string) => void;
 }
 
 function getProxiedImageUrl(url: string): string {
@@ -79,6 +80,7 @@ export default function SequenceCard(props: SequenceCardProps) {
     onDelete,
     onUnsubmit,
     onPublish,
+    onDuplicate,
   } = props;
 
   const router = useRouter();
@@ -273,6 +275,29 @@ export default function SequenceCard(props: SequenceCardProps) {
             </button>
           )}
 
+          {/* Duplicate Button */}
+          <button
+            onClick={() => onDuplicate(id)}
+            className="px-3 py-2 text-sm bg-blue-600/20 text-blue-400 rounded hover:bg-blue-600/30 transition-colors"
+            title="Duplicate project"
+          >
+            📋
+          </button>
+
+          {/* Copy URL Button - Only for published */}
+          {is_published && (
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(publicViewUrl);
+                alert('URL copied!');
+              }}
+              className="px-3 py-2 text-sm bg-green-600/20 text-green-400 rounded hover:bg-green-600/30 transition-colors"
+              title="Copy public URL"
+            >
+              🔗
+            </button>
+          )}
+
           {/* Delete Button */}
           <button
             onClick={() => onDelete(id)}
@@ -282,30 +307,6 @@ export default function SequenceCard(props: SequenceCardProps) {
             🗑️
           </button>
         </div>
-
-        {/* Published URL - Compact */}
-        {is_published && (
-          <div className="mt-3 pt-3 border-t border-gray-700">
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={publicViewUrl}
-                readOnly
-                className="flex-1 text-xs px-2 py-1 bg-gray-700 border border-gray-600 rounded font-mono text-gray-300 truncate"
-                onClick={(e) => (e.target as HTMLInputElement).select()}
-              />
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(publicViewUrl);
-                }}
-                className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 whitespace-nowrap"
-                title="Copy link"
-              >
-                Copy
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Click outside to close channel menu */}
