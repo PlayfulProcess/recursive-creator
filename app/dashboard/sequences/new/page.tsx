@@ -1087,13 +1087,19 @@ function NewSequencePageContent() {
           document_type: 'creative_work',
           tool_slug: 'sequence',
           story_slug: slug,
+          is_public: false,  // Start as unpublished
           document_data: {
             title: title.trim(),
             description: description.trim(),
-            is_active: 'false',
+            is_published: 'false',  // Fixed: was 'is_active'
             reviewed: 'false',
             creator_id: user.id,
-            items: validItems
+            items: validItems,
+            // Preserve channel submission fields
+            creator_name: creatorName.trim() || null,
+            creator_link: creatorLink.trim() || null,
+            thumbnail_url: thumbnailUrl.trim() || null,
+            hashtags: hashtags.length > 0 ? hashtags : null
           }
         })
         .select()
@@ -1102,8 +1108,9 @@ function NewSequencePageContent() {
       if (insertError) throw insertError;
 
       setSuccess(true);
+      setHasUnsavedChanges(false);
       localStorage.removeItem('sequence-draft'); // Clear draft after successful save
-      // Redirect to edit the new project
+      // Redirect to edit the new project (editingId will be set from URL params)
       router.push(`/dashboard/sequences/new?id=${insertData.id}`);
     } catch (err) {
       console.error('Error saving as new project:', err);
