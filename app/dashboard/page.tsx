@@ -78,9 +78,26 @@ export default function DashboardPage() {
     }
 
     try {
+      // First fetch the current document to get document_data
+      const { data: doc, error: fetchError } = await supabase
+        .from('user_documents')
+        .select('document_data')
+        .eq('id', sequenceId)
+        .eq('user_id', user!.id)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Update both is_public column AND document_data.is_published
       const { error } = await supabase
         .from('user_documents')
-        .update({ is_public: false })
+        .update({
+          is_public: false,
+          document_data: {
+            ...doc.document_data,
+            is_published: 'false'
+          }
+        })
         .eq('id', sequenceId)
         .eq('user_id', user!.id);
 
@@ -94,18 +111,69 @@ export default function DashboardPage() {
     }
   };
 
+  const handlePublishSequence = async (sequenceId: string) => {
+    try {
+      // First fetch the current document to get document_data
+      const { data: doc, error: fetchError } = await supabase
+        .from('user_documents')
+        .select('document_data')
+        .eq('id', sequenceId)
+        .eq('user_id', user!.id)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Update both is_public column AND document_data.is_published
+      const { error } = await supabase
+        .from('user_documents')
+        .update({
+          is_public: true,
+          document_data: {
+            ...doc.document_data,
+            is_published: 'true'
+          }
+        })
+        .eq('id', sequenceId)
+        .eq('user_id', user!.id);
+
+      if (error) throw error;
+
+      // Refresh the list
+      fetchSequences();
+    } catch (err) {
+      console.error('Error publishing sequence:', err);
+      alert('Failed to publish project. Please try again.');
+    }
+  };
+
   const handleDeleteSequence = async (sequenceId: string) => {
     if (!confirm('Are you sure you want to delete this project? This cannot be undone. It will also be removed from any channels.')) {
       return;
     }
 
     try {
-      // First unpublish (so channels don't have broken links)
-      await supabase
+      // First fetch the current document to get document_data
+      const { data: doc } = await supabase
         .from('user_documents')
-        .update({ is_public: false })
+        .select('document_data')
         .eq('id', sequenceId)
-        .eq('user_id', user!.id);
+        .eq('user_id', user!.id)
+        .single();
+
+      if (doc) {
+        // Unpublish first (so channels don't have broken links)
+        await supabase
+          .from('user_documents')
+          .update({
+            is_public: false,
+            document_data: {
+              ...doc.document_data,
+              is_published: 'false'
+            }
+          })
+          .eq('id', sequenceId)
+          .eq('user_id', user!.id);
+      }
 
       // Then delete
       const { error } = await supabase
@@ -194,6 +262,7 @@ export default function DashboardPage() {
                 creator_link={sequence.document_data.creator_link}
                 onDelete={handleDeleteSequence}
                 onUnpublish={handleUnpublishSequence}
+                onPublish={handlePublishSequence}
               />
             ))}
           </div>

@@ -32,6 +32,7 @@ interface SequenceCardProps {
   creator_link?: string;
   onDelete: (id: string) => void;
   onUnpublish: (id: string) => void;
+  onPublish: (id: string) => void;
 }
 
 function getProxiedImageUrl(url: string): string {
@@ -77,6 +78,7 @@ export default function SequenceCard(props: SequenceCardProps) {
     creator_link,
     onDelete,
     onUnpublish,
+    onPublish,
   } = props;
 
   const router = useRouter();
@@ -216,6 +218,16 @@ export default function SequenceCard(props: SequenceCardProps) {
           >
             ✏️ Edit
           </button>
+
+          {/* Publish Button - Only for unpublished */}
+          {!is_published && (
+            <button
+              onClick={() => onPublish(id)}
+              className="flex-1 px-3 py-2 text-sm bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+            >
+              🌐 Publish
+            </button>
+          )}
 
           {/* Submit to Channel - Only for published */}
           {is_published && (
