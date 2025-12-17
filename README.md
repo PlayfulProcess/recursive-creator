@@ -74,22 +74,121 @@ recursive-creator/
 
 ## 🚀 Current Status
 
-**Phase:** Phase 0 - Project Setup & Auth
-**Progress:** Planning complete ✅
-**Next:** Initialize Next.js + implement dual auth
+**Phase:** Phase 2 - Dashboard Card Grid & Actions
+**Progress:**
+- ✅ Auth (magic link + OTP)
+- ✅ Unified sequence creator (images + videos)
+- ✅ YouTube playlist import
+- ✅ Drive folder batch import
+- ✅ Publishing workflow with CC BY-SA 4.0 licensing
+- ✅ Dashboard card grid view
+- 🔄 Card actions (submit, unsubmit, delete)
+
+**Next:** Fix 🔒 unsubmit to properly update `tools` table
 
 ---
 
-## 🛠️ Next Steps
+## 🛠️ Current Tasks
 
-1. Initialize Next.js 15 project
-2. Copy auth files from recursive-channels-fresh
-3. Implement DualAuth component
-4. Update Supabase email template
-5. Test across email providers
-6. Copy to other projects
+1. ✅ Dashboard card grid with thumbnails
+2. 🔄 Fix 🔒 button to unsubmit from channels (update `tools.is_active`)
+3. 🔄 Fix delete cascade (unsubmit before delete)
+4. ⏳ Investigate "Save New" bug in editor
 
-**Timeline:** 3-4 days (auth), then features
+---
+
+## 🏗️ Architecture: Two-State Visibility System
+
+### Overview
+
+Content in Recursive.eco has **two independent visibility states**:
+
+1. **Viewer Visibility** (`user_documents` table) - Can the public view at `recursive.eco/view/[id]`?
+2. **Channel Visibility** (`tools` table) - Does it appear in public channels at `channels.recursive.eco`?
+
+### Table Structure
+
+#### `user_documents` (Source of Truth for Content)
+
+| Column | Purpose |
+|--------|---------|
+| `id` | UUID of the document |
+| `user_id` | Owner of the content |
+| `is_public` | **Viewer visibility** - `true` = viewable at `recursive.eco/view/{id}` |
+| `document_data` | JSONB with content details |
+| `document_data.is_published` | String `"true"/"false"` - mirrors `is_public` |
+| `document_data.title` | Content title |
+| `document_data.items` | Array of sequence items (images/videos) |
+
+#### `tools` (Channel Submissions)
+
+| Column | Purpose |
+|--------|---------|
+| `id` | UUID of the tool entry |
+| `channel_id` | Which channel this belongs to |
+| `tool_data` | JSONB with submission details |
+| `tool_data.url` | Link to viewer: `https://recursive.eco/view/{doc_id}` |
+| `tool_data.is_active` | **Channel visibility** - `"true"/"false"` |
+| `tool_data.name` | Display name in channel |
+
+### Visibility Matrix
+
+| `is_public` | `tool_data.is_active` | Result |
+|-------------|----------------------|--------|
+| `true` | `"true"` | ✅ Viewable + In channels |
+| `true` | `"false"` | ✅ Viewable, ❌ Not in channels |
+| `false` | `"true"` | ❌ Broken link in channels! |
+| `false` | `"false"` | ❌ Not viewable, ❌ Not in channels |
+
+### User Actions & Correct Behavior
+
+| Action | Button | What it does |
+|--------|--------|--------------|
+| **Publish** | 🌐 | Sets `user_documents.is_public = true` |
+| **Submit to Channel** | 📤 | Creates entry in `tools` table with `is_active: "true"` |
+| **Unsubmit from Channel** | 🔒 | Sets `tools.tool_data.is_active = "false"` (keeps viewable!) |
+| **Unpublish** | (future) | Sets `user_documents.is_public = false` |
+| **Delete** | 🗑️ | 1) Unsubmit from channels, 2) Delete from `user_documents` |
+
+### Key Insight
+
+**🔒 Unsubmit ≠ Unpublish**
+
+- **Unsubmit**: Remove from channels, but keep viewable at direct URL
+- **Unpublish**: Make invisible everywhere (breaks channel links!)
+
+When deleting content, always unsubmit from channels FIRST to avoid broken links.
+
+### Code Examples
+
+**Finding tools entries for a document:**
+```typescript
+// Find all channel submissions for a document
+const docId = 'uuid-here';
+const viewerUrl = `https://recursive.eco/view/${docId}`;
+
+const { data: tools } = await supabase
+  .from('tools')
+  .select('*')
+  .ilike('tool_data->>url', `%${docId}%`);
+```
+
+**Unsubmitting from channels:**
+```typescript
+// Set is_active = "false" for all channel entries
+const { data: tool } = await supabase
+  .from('tools')
+  .select('tool_data')
+  .eq('id', toolId)
+  .single();
+
+await supabase
+  .from('tools')
+  .update({
+    tool_data: { ...tool.tool_data, is_active: 'false' }
+  })
+  .eq('id', toolId);
+```
 
 ---
 
