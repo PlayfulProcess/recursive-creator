@@ -352,10 +352,9 @@ function NewSequencePageContent() {
 
       if (error) throw error;
 
-      setTitle(data.document_data.title || '');
-      setDescription(data.document_data.description || '');
-
       // Load channel fields - check tools table FIRST (most recent), then fall back to user_documents
+      let titleValue = data.document_data.title || '';
+      let descriptionValue = data.document_data.description || '';
       let creatorNameValue = '';
       let creatorLinkValue = '';
       let thumbnailUrlValue = '';
@@ -372,7 +371,11 @@ function NewSequencePageContent() {
 
       if (toolsData?.tool_data) {
         console.log('Found channel submission data (priority):', toolsData.tool_data);
+        // Pull ALL fields from tools table (these take priority over user_documents)
+        if (toolsData.tool_data.name) titleValue = toolsData.tool_data.name;
+        if (toolsData.tool_data.description) descriptionValue = toolsData.tool_data.description;
         creatorNameValue = toolsData.tool_data.submitted_by || '';
+        creatorLinkValue = toolsData.tool_data.creator_link || '';
         thumbnailUrlValue = toolsData.tool_data.thumbnail || '';
         if (toolsData.tool_data.hashtags) {
           hashtagsValue = Array.isArray(toolsData.tool_data.hashtags)
@@ -396,12 +399,17 @@ function NewSequencePageContent() {
       }
 
       console.log('Final channel fields (tools → user_documents fallback):', {
+        title: titleValue,
+        description: descriptionValue,
         creator_name: creatorNameValue,
         creator_link: creatorLinkValue,
         thumbnail_url: thumbnailUrlValue,
         hashtags: hashtagsValue
       });
 
+      // Set all state
+      setTitle(titleValue);
+      setDescription(descriptionValue);
       setCreatorName(creatorNameValue);
       setCreatorLink(creatorLinkValue);
       setThumbnailUrl(thumbnailUrlValue);
@@ -2016,10 +2024,32 @@ function NewSequencePageContent() {
                 params.set('doc_id', publishedDocId || '');
                 params.set('channel', channel.id);
                 params.set('title', title);
+                // Include full URL for the content
+                params.set('url', `https://recursive.eco/view/${publishedDocId}`);
                 if (description) params.set('description', description);
                 if (creatorName) params.set('creator_name', creatorName);
                 if (creatorLink) params.set('creator_link', creatorLink);
-                if (thumbnailUrl) params.set('thumbnail_url', thumbnailUrl);
+
+                // Priority for thumbnail:
+                // 1. First YouTube video thumbnail (most reliable)
+                // 2. Item with explicit thumbnail field
+                // 3. Manually set thumbnailUrl
+                let submissionThumbnail = thumbnailUrl;
+                const firstVideoItem = items.find(item =>
+                  item.type === 'video' && item.video_id && item.video_id.length === 11
+                );
+                if (firstVideoItem?.video_id) {
+                  // Use YouTube's high quality thumbnail URL
+                  submissionThumbnail = `https://i.ytimg.com/vi/${firstVideoItem.video_id}/mqdefault.jpg`;
+                } else if (!submissionThumbnail) {
+                  // Check if any item has an explicit thumbnail
+                  const itemWithThumbnail = items.find(item => item.thumbnail);
+                  if (itemWithThumbnail?.thumbnail) {
+                    submissionThumbnail = itemWithThumbnail.thumbnail;
+                  }
+                }
+
+                if (submissionThumbnail) params.set('thumbnail_url', submissionThumbnail);
                 if (hashtags.length > 0) params.set('hashtags', hashtags.join(','));
 
                 return (
