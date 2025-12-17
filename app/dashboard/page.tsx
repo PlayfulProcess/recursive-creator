@@ -72,42 +72,52 @@ export default function DashboardPage() {
     }
   };
 
-  const handleUnpublishSequence = async (sequenceId: string) => {
-    if (!confirm('Unpublish this project? It will no longer be visible in channels or via public link.')) {
+  // Unsubmit from channels - sets tools.tool_data.is_active = "false"
+  // This keeps the project viewable at recursive.eco/view/[id] but removes from channels
+  const handleUnsubmitFromChannels = async (sequenceId: string) => {
+    if (!confirm('Remove this project from all channels? It will still be viewable via its direct link.')) {
       return;
     }
 
     try {
-      // First fetch the current document to get document_data
-      const { data: doc, error: fetchError } = await supabase
-        .from('user_documents')
-        .select('document_data')
-        .eq('id', sequenceId)
-        .eq('user_id', user!.id)
-        .single();
+      // Find all tools entries that reference this document
+      // The URL format is: https://recursive.eco/view/{doc_id} or https://dev.recursive.eco/view/{doc_id}
+      const { data: tools, error: fetchError } = await supabase
+        .from('tools')
+        .select('id, tool_data')
+        .ilike('tool_data->>url', `%${sequenceId}%`);
 
       if (fetchError) throw fetchError;
 
-      // Update both is_public column AND document_data.is_published
-      const { error } = await supabase
-        .from('user_documents')
-        .update({
-          is_public: false,
-          document_data: {
-            ...doc.document_data,
-            is_published: 'false'
-          }
-        })
-        .eq('id', sequenceId)
-        .eq('user_id', user!.id);
+      if (!tools || tools.length === 0) {
+        alert('This project is not currently in any channels.');
+        return;
+      }
 
-      if (error) throw error;
+      // Update each tool entry to set is_active = "false"
+      for (const tool of tools) {
+        const { error: updateError } = await supabase
+          .from('tools')
+          .update({
+            tool_data: {
+              ...tool.tool_data,
+              is_active: 'false'
+            }
+          })
+          .eq('id', tool.id);
 
-      // Refresh the list
+        if (updateError) {
+          console.error('Error updating tool:', tool.id, updateError);
+        }
+      }
+
+      alert(`Removed from ${tools.length} channel(s). Project is still viewable via direct link.`);
+
+      // Refresh the list (in case we want to show channel status later)
       fetchSequences();
     } catch (err) {
-      console.error('Error unpublishing sequence:', err);
-      alert('Failed to unpublish project. Please try again.');
+      console.error('Error unsubmitting from channels:', err);
+      alert('Failed to remove from channels. Please try again.');
     }
   };
 
@@ -152,30 +162,29 @@ export default function DashboardPage() {
     }
 
     try {
-      // First fetch the current document to get document_data
-      const { data: doc } = await supabase
-        .from('user_documents')
-        .select('document_data')
-        .eq('id', sequenceId)
-        .eq('user_id', user!.id)
-        .single();
+      // Step 1: Unsubmit from all channels first (set tools.is_active = "false")
+      // This prevents broken links in channels
+      const { data: tools } = await supabase
+        .from('tools')
+        .select('id, tool_data')
+        .ilike('tool_data->>url', `%${sequenceId}%`);
 
-      if (doc) {
-        // Unpublish first (so channels don't have broken links)
-        await supabase
-          .from('user_documents')
-          .update({
-            is_public: false,
-            document_data: {
-              ...doc.document_data,
-              is_published: 'false'
-            }
-          })
-          .eq('id', sequenceId)
-          .eq('user_id', user!.id);
+      if (tools && tools.length > 0) {
+        for (const tool of tools) {
+          await supabase
+            .from('tools')
+            .update({
+              tool_data: {
+                ...tool.tool_data,
+                is_active: 'false'
+              }
+            })
+            .eq('id', tool.id);
+        }
+        console.log(`Unsubmitted from ${tools.length} channel(s) before delete`);
       }
 
-      // Then delete
+      // Step 2: Delete the document
       const { error } = await supabase
         .from('user_documents')
         .delete()
@@ -261,7 +270,7 @@ export default function DashboardPage() {
                 creator_name={sequence.document_data.creator_name}
                 creator_link={sequence.document_data.creator_link}
                 onDelete={handleDeleteSequence}
-                onUnpublish={handleUnpublishSequence}
+                onUnsubmit={handleUnsubmitFromChannels}
                 onPublish={handlePublishSequence}
               />
             ))}

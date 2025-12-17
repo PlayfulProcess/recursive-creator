@@ -31,7 +31,7 @@ interface SequenceCardProps {
   creator_name?: string;
   creator_link?: string;
   onDelete: (id: string) => void;
-  onUnpublish: (id: string) => void;
+  onUnsubmit: (id: string) => void;
   onPublish: (id: string) => void;
 }
 
@@ -77,7 +77,7 @@ export default function SequenceCard(props: SequenceCardProps) {
     creator_name,
     creator_link,
     onDelete,
-    onUnpublish,
+    onUnsubmit,
     onPublish,
   } = props;
 
@@ -262,12 +262,12 @@ export default function SequenceCard(props: SequenceCardProps) {
             </div>
           )}
 
-          {/* Unpublish - Only for published */}
+          {/* Unsubmit from Channels - Only for published */}
           {is_published && (
             <button
-              onClick={() => onUnpublish(id)}
+              onClick={() => onUnsubmit(id)}
               className="px-3 py-2 text-sm bg-yellow-600/20 text-yellow-400 rounded hover:bg-yellow-600/30 transition-colors"
-              title="Unpublish from public view"
+              title="Remove from all channels (keeps direct link working)"
             >
               🔒
             </button>
