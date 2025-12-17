@@ -26,6 +26,7 @@ interface Sequence {
     thumbnail_url?: string;
     hashtags?: string[];
     creator_name?: string;
+    creator_link?: string;
   };
   created_at: string;
 }
@@ -71,12 +72,42 @@ export default function DashboardPage() {
     }
   };
 
-  const handleDeleteSequence = async (sequenceId: string) => {
-    if (!confirm('Are you sure you want to delete this project? This cannot be undone.')) {
+  const handleUnpublishSequence = async (sequenceId: string) => {
+    if (!confirm('Unpublish this project? It will no longer be visible in channels or via public link.')) {
       return;
     }
 
     try {
+      const { error } = await supabase
+        .from('user_documents')
+        .update({ is_public: false })
+        .eq('id', sequenceId)
+        .eq('user_id', user!.id);
+
+      if (error) throw error;
+
+      // Refresh the list
+      fetchSequences();
+    } catch (err) {
+      console.error('Error unpublishing sequence:', err);
+      alert('Failed to unpublish project. Please try again.');
+    }
+  };
+
+  const handleDeleteSequence = async (sequenceId: string) => {
+    if (!confirm('Are you sure you want to delete this project? This cannot be undone. It will also be removed from any channels.')) {
+      return;
+    }
+
+    try {
+      // First unpublish (so channels don't have broken links)
+      await supabase
+        .from('user_documents')
+        .update({ is_public: false })
+        .eq('id', sequenceId)
+        .eq('user_id', user!.id);
+
+      // Then delete
       const { error } = await supabase
         .from('user_documents')
         .delete()
@@ -159,7 +190,10 @@ export default function DashboardPage() {
                 is_reviewed={sequence.document_data.reviewed === 'true'}
                 created_at={sequence.created_at}
                 hashtags={sequence.document_data.hashtags}
+                creator_name={sequence.document_data.creator_name}
+                creator_link={sequence.document_data.creator_link}
                 onDelete={handleDeleteSequence}
+                onUnpublish={handleUnpublishSequence}
               />
             ))}
           </div>

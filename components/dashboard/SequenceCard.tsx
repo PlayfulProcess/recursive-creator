@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 
 interface SequenceItem {
   type: 'image' | 'video';
@@ -8,6 +9,13 @@ interface SequenceItem {
   video_id?: string;
   title?: string;
 }
+
+// Available channels for submission
+const AVAILABLE_CHANNELS = [
+  { id: 'kids-stories', name: 'Kids Stories', icon: '📚' },
+  { id: 'wellness', name: 'Wellness', icon: '🧘' },
+  { id: 'learning', name: 'Learning', icon: '📖' },
+];
 
 interface SequenceCardProps {
   id: string;
@@ -20,32 +28,31 @@ interface SequenceCardProps {
   is_reviewed: boolean;
   created_at: string;
   hashtags?: string[];
+  creator_name?: string;
+  creator_link?: string;
   onDelete: (id: string) => void;
+  onUnpublish: (id: string) => void;
 }
 
 function getProxiedImageUrl(url: string): string {
-  // Check if it's a Drive URL that needs proxying
   if (url.includes('drive.google.com') || url.includes('googleusercontent.com')) {
     return `/api/proxy-image?url=${encodeURIComponent(url)}`;
   }
   return url;
 }
 
-function getThumbnailUrl(sequence: SequenceCardProps): string | null {
-  // First priority: explicit thumbnail_url
-  if (sequence.thumbnail_url) {
-    return getProxiedImageUrl(sequence.thumbnail_url);
+function getThumbnailUrl(props: SequenceCardProps): string | null {
+  if (props.thumbnail_url) {
+    return getProxiedImageUrl(props.thumbnail_url);
   }
 
-  // Second priority: first image in items
-  if (sequence.items && sequence.items.length > 0) {
-    const firstImage = sequence.items.find(item => item.type === 'image' && item.image_url);
+  if (props.items && props.items.length > 0) {
+    const firstImage = props.items.find(item => item.type === 'image' && item.image_url);
     if (firstImage?.image_url) {
       return getProxiedImageUrl(firstImage.image_url);
     }
 
-    // Third priority: YouTube thumbnail
-    const firstVideo = sequence.items.find(item => item.type === 'video' && item.video_id);
+    const firstVideo = props.items.find(item => item.type === 'video' && item.video_id);
     if (firstVideo?.video_id && firstVideo.video_id.length === 11) {
       return `https://img.youtube.com/vi/${firstVideo.video_id}/mqdefault.jpg`;
     }
@@ -54,22 +61,8 @@ function getThumbnailUrl(sequence: SequenceCardProps): string | null {
   return null;
 }
 
-export default function SequenceCard({
-  id,
-  title,
-  description,
-  thumbnail_url,
-  items,
-  items_count,
-  is_published,
-  is_reviewed,
-  created_at,
-  hashtags,
-  onDelete,
-}: SequenceCardProps) {
-  const router = useRouter();
-
-  const thumbnailUrl = getThumbnailUrl({
+export default function SequenceCard(props: SequenceCardProps) {
+  const {
     id,
     title,
     description,
@@ -80,8 +73,17 @@ export default function SequenceCard({
     is_reviewed,
     created_at,
     hashtags,
+    creator_name,
+    creator_link,
     onDelete,
-  });
+    onUnpublish,
+  } = props;
+
+  const router = useRouter();
+  const [showChannelMenu, setShowChannelMenu] = useState(false);
+
+  const thumbnailUrl = getThumbnailUrl(props);
+  const publicViewUrl = `https://recursive.eco/view/${id}`;
 
   const getStatusBadge = () => {
     if (is_published) {
@@ -105,12 +107,35 @@ export default function SequenceCard({
     }
   };
 
+  const buildChannelSubmitUrl = (channelId: string) => {
+    const params = new URLSearchParams();
+    params.set('doc_id', id);
+    params.set('channel', channelId);
+    params.set('title', title);
+    if (description) params.set('description', description);
+    if (creator_name) params.set('creator_name', creator_name);
+    if (creator_link) params.set('creator_link', creator_link);
+    if (thumbnail_url) params.set('thumbnail_url', thumbnail_url);
+    if (hashtags && hashtags.length > 0) params.set('hashtags', hashtags.join(','));
+    return `https://channels.recursive.eco/channels/${channelId}?${params.toString()}`;
+  };
+
+  const handleCardClick = () => {
+    if (is_published) {
+      // Open public view in new tab
+      window.open(publicViewUrl, '_blank');
+    } else {
+      // Go to edit if not published
+      router.push(`/dashboard/sequences/new?id=${id}`);
+    }
+  };
+
   return (
-    <div className="bg-gray-800 rounded-lg overflow-hidden border border-gray-700 hover:border-purple-500 transition-all group">
+    <div className="bg-gray-800 rounded-lg overflow-hidden border border-gray-700 hover:border-purple-500 transition-all group relative">
       {/* Thumbnail */}
       <div
         className="aspect-video bg-gray-900 relative cursor-pointer"
-        onClick={() => router.push(`/dashboard/sequences/new?id=${id}`)}
+        onClick={handleCardClick}
       >
         {thumbnailUrl ? (
           <img
@@ -118,13 +143,12 @@ export default function SequenceCard({
             alt={title}
             className="w-full h-full object-cover"
             onError={(e) => {
-              // Fallback to placeholder on error
               (e.target as HTMLImageElement).style.display = 'none';
               (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
             }}
           />
         ) : null}
-        {/* Placeholder (shown when no thumbnail or on error) */}
+        {/* Placeholder */}
         <div className={`w-full h-full flex items-center justify-center text-5xl absolute inset-0 ${thumbnailUrl ? 'hidden' : ''}`}>
           <span className="opacity-50">
             {items && items.some(i => i.type === 'video') ? '🎬' : '🖼️'}
@@ -136,9 +160,16 @@ export default function SequenceCard({
           {items_count} {items_count === 1 ? 'item' : 'items'}
         </span>
 
+        {/* Status badge on thumbnail */}
+        <div className="absolute top-2 left-2">
+          {getStatusBadge()}
+        </div>
+
         {/* Hover overlay */}
         <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-          <span className="text-white font-medium">Edit Project</span>
+          <span className="text-white font-medium">
+            {is_published ? 'View Project' : 'Edit Project'}
+          </span>
         </div>
       </div>
 
@@ -146,7 +177,7 @@ export default function SequenceCard({
       <div className="p-4">
         <h3
           className="font-semibold text-white truncate cursor-pointer hover:text-purple-400 transition-colors"
-          onClick={() => router.push(`/dashboard/sequences/new?id=${id}`)}
+          onClick={handleCardClick}
         >
           {title || 'Untitled Project'}
         </h3>
@@ -176,40 +207,84 @@ export default function SequenceCard({
           {new Date(created_at).toLocaleDateString()}
         </p>
 
-        {/* Status & Actions */}
-        <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-700">
-          {getStatusBadge()}
+        {/* Action Buttons */}
+        <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-700">
+          {/* Edit Button */}
+          <button
+            onClick={() => router.push(`/dashboard/sequences/new?id=${id}`)}
+            className="flex-1 px-3 py-2 text-sm bg-gray-700 text-white rounded hover:bg-gray-600 transition-colors"
+          >
+            ✏️ Edit
+          </button>
 
-          <div className="flex gap-2">
+          {/* Submit to Channel - Only for published */}
+          {is_published && (
+            <div className="relative flex-1">
+              <button
+                onClick={() => setShowChannelMenu(!showChannelMenu)}
+                className="w-full px-3 py-2 text-sm bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
+              >
+                📤 Submit
+              </button>
+
+              {/* Channel dropdown */}
+              {showChannelMenu && (
+                <div className="absolute bottom-full left-0 right-0 mb-1 bg-gray-700 rounded-lg shadow-lg border border-gray-600 overflow-hidden z-10">
+                  <div className="text-xs text-gray-400 px-3 py-2 border-b border-gray-600">
+                    Submit to channel:
+                  </div>
+                  {AVAILABLE_CHANNELS.map((channel) => (
+                    <a
+                      key={channel.id}
+                      href={buildChannelSubmitUrl(channel.id)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block px-3 py-2 text-sm text-white hover:bg-gray-600 transition-colors"
+                      onClick={() => setShowChannelMenu(false)}
+                    >
+                      {channel.icon} {channel.name}
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Unpublish - Only for published */}
+          {is_published && (
             <button
-              onClick={() => router.push(`/dashboard/sequences/new?id=${id}`)}
-              className="text-sm text-gray-400 hover:text-white transition-colors"
+              onClick={() => onUnpublish(id)}
+              className="px-3 py-2 text-sm bg-yellow-600/20 text-yellow-400 rounded hover:bg-yellow-600/30 transition-colors"
+              title="Unpublish from public view"
             >
-              Edit
+              🔒
             </button>
-            <button
-              onClick={() => onDelete(id)}
-              className="text-sm text-gray-400 hover:text-red-400 transition-colors"
-            >
-              Delete
-            </button>
-          </div>
+          )}
+
+          {/* Delete Button */}
+          <button
+            onClick={() => onDelete(id)}
+            className="px-3 py-2 text-sm bg-red-600/20 text-red-400 rounded hover:bg-red-600/30 transition-colors"
+            title="Delete project"
+          >
+            🗑️
+          </button>
         </div>
 
-        {/* Published URL */}
+        {/* Published URL - Compact */}
         {is_published && (
           <div className="mt-3 pt-3 border-t border-gray-700">
             <div className="flex items-center gap-2">
               <input
                 type="text"
-                value={`https://recursive.eco/view/${id}`}
+                value={publicViewUrl}
                 readOnly
                 className="flex-1 text-xs px-2 py-1 bg-gray-700 border border-gray-600 rounded font-mono text-gray-300 truncate"
                 onClick={(e) => (e.target as HTMLInputElement).select()}
               />
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(`https://recursive.eco/view/${id}`);
+                  navigator.clipboard.writeText(publicViewUrl);
                 }}
                 className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 whitespace-nowrap"
                 title="Copy link"
@@ -220,6 +295,14 @@ export default function SequenceCard({
           </div>
         )}
       </div>
+
+      {/* Click outside to close channel menu */}
+      {showChannelMenu && (
+        <div
+          className="fixed inset-0 z-0"
+          onClick={() => setShowChannelMenu(false)}
+        />
+      )}
     </div>
   );
 }
