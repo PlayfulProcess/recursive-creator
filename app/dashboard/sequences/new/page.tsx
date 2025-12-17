@@ -1,10 +1,28 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase-client';
 import SequenceViewer from '@/components/viewers/SequenceViewer';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 const MAX_ITEMS = 50; // Security limit
 
@@ -21,6 +39,134 @@ interface SequenceItem {
   video_id?: string;
   url?: string;
   title?: string;
+  creator?: string;           // YouTube channel name
+  thumbnail?: string;         // Better quality thumbnail URL
+  duration_seconds?: number;  // Video duration in seconds
+}
+
+interface VideoMetadata {
+  title: string;
+  creator: string;
+  thumbnail: string;
+  duration_seconds: number;
+}
+
+interface SortableItemCardProps {
+  id: string;
+  item: SequenceItem;
+  index: number;
+  onDelete: () => void;
+  onEditTitle: (newTitle: string) => void;
+  onPositionClick: () => void;
+}
+
+function SortableItemCard({ id, item, index, onDelete, onEditTitle, onPositionClick }: SortableItemCardProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="bg-gray-700 rounded-lg p-4 mb-3 border border-gray-600 flex items-center gap-4"
+    >
+      {/* Drag Handle */}
+      <div
+        {...attributes}
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-white text-2xl"
+      >
+        ≡
+      </div>
+
+      {/* Position Badge */}
+      <div
+        onClick={onPositionClick}
+        className="bg-purple-600 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm cursor-pointer hover:bg-purple-700 transition-colors"
+      >
+        {index + 1}
+      </div>
+
+      {/* Thumbnail */}
+      {item.type === 'video' ? (
+        item.video_id && item.video_id.length === 11 ? (
+          <img
+            src={item.thumbnail || `https://i.ytimg.com/vi/${item.video_id}/mqdefault.jpg`}
+            alt={item.title || 'Video thumbnail'}
+            className="w-32 h-18 object-cover rounded"
+          />
+        ) : (
+          <div className="w-32 h-18 bg-gray-600 rounded flex items-center justify-center text-gray-400 text-xs">
+            Drive Video
+          </div>
+        )
+      ) : (
+        <img
+          src={`/api/proxy-image?url=${encodeURIComponent(item.image_url || '')}`}
+          alt={item.alt_text || 'Image'}
+          className="w-32 h-18 object-cover rounded"
+          onError={(e) => {
+            // Fallback for broken images
+            (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="128" height="72"%3E%3Crect fill="%23374151" width="128" height="72"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%239ca3af" font-size="12"%3EImage%3C/text%3E%3C/svg%3E';
+          }}
+        />
+      )}
+
+      {/* Content Info */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-lg">{item.type === 'video' ? '🎥' : '📷'}</span>
+          <span className="text-white font-semibold truncate">
+            {item.type === 'video'
+              ? (item.title || item.video_id || 'Untitled')
+              : (item.alt_text || 'Untitled')}
+          </span>
+        </div>
+        <div className="text-gray-400 text-sm font-mono truncate">
+          ID: {item.video_id || item.image_url?.split('/').pop()?.substring(0, 20) || 'N/A'}
+        </div>
+        {item.type === 'video' && item.creator && (
+          <div className="text-gray-400 text-sm truncate">
+            By: {item.creator}
+          </div>
+        )}
+        {item.type === 'image' && (
+          <div className="text-gray-400 text-sm truncate">
+            <span className="italic">Author: (sequence author will be used)</span>
+          </div>
+        )}
+
+        {/* Inline Title Edit */}
+        <input
+          type="text"
+          value={item.type === 'video' ? (item.title || '') : (item.alt_text || '')}
+          onChange={(e) => onEditTitle(e.target.value)}
+          placeholder={item.type === 'video' ? 'Video title...' : 'Alt text...'}
+          className="mt-2 w-full px-2 py-1 bg-gray-600 border border-gray-500 rounded text-white text-sm"
+        />
+      </div>
+
+      {/* Delete Button */}
+      <button
+        onClick={onDelete}
+        className="text-red-500 hover:text-red-400 text-2xl font-bold"
+      >
+        ×
+      </button>
+    </div>
+  );
 }
 
 function NewSequencePageContent() {
@@ -28,13 +174,13 @@ function NewSequencePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
+  const itemsContainerRef = useRef<HTMLDivElement>(null);
 
   const editingId = searchParams.get('id');
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [items, setItems] = useState<SequenceItem[]>([]);
-  const [bulkUrls, setBulkUrls] = useState('');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +188,7 @@ function NewSequencePageContent() {
   const [isPublished, setIsPublished] = useState(false);
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
   const [publishedDocId, setPublishedDocId] = useState<string | null>(null);
+  const [isReported, setIsReported] = useState(false); // Track if content has been reported
 
   // Drive folder import modal
   const [showImportModal, setShowImportModal] = useState(false);
@@ -55,8 +202,18 @@ function NewSequencePageContent() {
   const [importingPlaylist, setImportingPlaylist] = useState(false);
   const [playlistError, setPlaylistError] = useState<string | null>(null);
 
+  // YouTube Kids channel import modal
+  const [showKidsChannelModal, setShowKidsChannelModal] = useState(false);
+  const [kidsChannelUrl, setKidsChannelUrl] = useState('');
+  const [importingKidsChannel, setImportingKidsChannel] = useState(false);
+  const [kidsChannelError, setKidsChannelError] = useState<string | null>(null);
+
+  // Import Links modal (bulk URL import)
+  const [showImportLinksModal, setShowImportLinksModal] = useState(false);
+  const [modalBulkUrls, setModalBulkUrls] = useState('');
+
   // Store video metadata (URL → title mapping) from YouTube API
-  const [videoMetadata, setVideoMetadata] = useState<Map<string, string>>(new Map());
+  const [videoMetadata, setVideoMetadata] = useState<Map<string, VideoMetadata>>(new Map());
 
   // Channel selection modal
   const [showChannelSelectModal, setShowChannelSelectModal] = useState(false);
@@ -64,12 +221,51 @@ function NewSequencePageContent() {
   // License agreement
   const [licenseAgreed, setLicenseAgreed] = useState(false);
 
-  // Available channels for submission
+  // Track unsaved changes for floating save button
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  // Success modal state
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+
+  // Position modal state
+  const [showPositionModal, setShowPositionModal] = useState(false);
+  const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
+  const [newPosition, setNewPosition] = useState('');
+
+  // Items view expansion state
+  const [itemsExpanded, setItemsExpanded] = useState(false);
+
+  // Optional channel submission fields
+  const [creatorName, setCreatorName] = useState('');
+  const [creatorLink, setCreatorLink] = useState('');
+  const [thumbnailUrl, setThumbnailUrl] = useState('');
+  const [hashtags, setHashtags] = useState<string[]>([]);
+  const [hashtagInput, setHashtagInput] = useState('');
+
+  // Details section expansion state
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
+
+  // Available channels for submission (matching channels.recursive.eco header)
   const AVAILABLE_CHANNELS = [
-    { id: 'kids-stories', name: 'Kids Stories', description: 'Children\'s books, educational content, family-friendly videos' },
-    { id: 'wellness', name: 'Wellness', description: 'Mental health, mindfulness, self-care resources' },
-    { id: 'learning', name: 'Learning', description: 'Educational resources, tutorials, skill-building content' },
+    { id: 'kids-stories', name: 'Community Kids Stories', description: 'Parent-Created Stories for Children' },
+    { id: 'wellness', name: 'Wellness', description: 'Interactive Tools for a better life' },
+    { id: 'resources', name: 'Resources for Parents', description: 'Curated Content for Parenting, Growth, and Family Wellbeing' },
   ];
+
+  // Setup drag-and-drop sensors for touch, mouse, and keyboard
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(TouchSensor, {
+      // Require minimal movement before starting drag (prevents accidental drags)
+      activationConstraint: {
+        delay: 100,
+        tolerance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   // Load sequence data when editing
   useEffect(() => {
@@ -77,6 +273,72 @@ function NewSequencePageContent() {
       loadSequence(editingId);
     }
   }, [editingId, user]);
+
+  // Load draft from localStorage for new sequences (not editing existing)
+  useEffect(() => {
+    if (!editingId && !loading) {
+      const savedDraft = localStorage.getItem('sequence-draft');
+      if (savedDraft) {
+        try {
+          const draft = JSON.parse(savedDraft);
+          if (draft.title) setTitle(draft.title);
+          if (draft.description) setDescription(draft.description);
+          if (draft.items && draft.items.length > 0) setItems(draft.items);
+          if (draft.creatorName) setCreatorName(draft.creatorName);
+          if (draft.creatorLink) setCreatorLink(draft.creatorLink);
+          if (draft.thumbnailUrl) setThumbnailUrl(draft.thumbnailUrl);
+          if (draft.hashtags) setHashtags(draft.hashtags);
+          console.log('Loaded draft from localStorage');
+        } catch (e) {
+          console.error('Failed to load draft:', e);
+        }
+      }
+    }
+  }, [editingId, loading]);
+
+  // Save draft to localStorage when form changes (only for new sequences)
+  useEffect(() => {
+    if (!editingId && !saving && !loading) {
+      const draft = {
+        title,
+        description,
+        items,
+        creatorName,
+        creatorLink,
+        thumbnailUrl,
+        hashtags,
+        savedAt: new Date().toISOString()
+      };
+      // Only save if there's actually content
+      if (title || description || items.length > 0) {
+        localStorage.setItem('sequence-draft', JSON.stringify(draft));
+      }
+    }
+  }, [title, description, items, creatorName, creatorLink, thumbnailUrl, hashtags, editingId, saving, loading]);
+
+  // Track unsaved changes (but ignore initial load)
+  useEffect(() => {
+    // Don't mark as unsaved on initial load or during save
+    if (saving || loading) return;
+
+    // If we have title or items, consider it changed (unless just loaded)
+    if (title || description || items.length > 0) {
+      setHasUnsavedChanges(true);
+    }
+  }, [title, description, items, saving, loading]);
+
+  // Keyboard navigation: CTRL+END to scroll to items container
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === 'End') {
+        e.preventDefault();
+        itemsContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const loadSequence = async (id: string) => {
     setLoading(true);
@@ -93,9 +355,19 @@ function NewSequencePageContent() {
       setTitle(data.document_data.title || '');
       setDescription(data.document_data.description || '');
 
+      // Load optional channel submission fields
+      setCreatorName(data.document_data.creator_name || data.document_data.author || '');
+      setCreatorLink(data.document_data.creator_link || '');
+      setThumbnailUrl(data.document_data.thumbnail_url || '');
+      setHashtags(data.document_data.hashtags || []);
+
       // Check if published (from document_data.is_published)
       const isPublishedValue = data.document_data.is_published === 'true';
       setIsPublished(isPublishedValue);
+
+      // Check if reported (blocks re-publishing)
+      const isReportedValue = data.reported === true;
+      setIsReported(isReportedValue);
 
       // Set published URL and doc ID if published
       if (isPublishedValue) {
@@ -128,28 +400,6 @@ function NewSequencePageContent() {
           return item;
         });
         setItems(cleanedItems);
-
-        // Populate bulkUrls textarea with existing URLs
-        const urlList = cleanedItems.map((item: SequenceItem) => {
-          if (item.type === 'video') {
-            // Check if it's Drive video (longer ID) or YouTube (11 chars)
-            if (item.video_id && item.video_id.length > 11) {
-              // Drive video
-              return `video: https://drive.google.com/file/d/${item.video_id}/view`;
-            } else if (item.url) {
-              // YouTube - use original URL if available
-              return item.url;
-            } else {
-              // YouTube - reconstruct from ID
-              return `https://youtube.com/watch?v=${item.video_id}`;
-            }
-          } else {
-            // Image
-            return item.image_url || '';
-          }
-        }).filter((url: string) => url.trim() !== '');
-
-        setBulkUrls(urlList.join('\n'));
       }
     } catch (err) {
       console.error('Error loading project:', err);
@@ -251,72 +501,6 @@ function NewSequencePageContent() {
     return { type: 'image', processedUrl: trimmedUrl };
   };
 
-  const handleParseBulkUrls = () => {
-    if (!bulkUrls.trim()) {
-      // Empty textarea = clear all items
-      setItems([]);
-      setError(null);
-      return;
-    }
-
-    // Keep URLs in the order they appear (Import Folder pre-sorts by filename)
-    const lines = bulkUrls.split(/[\n,]+/).filter(line => line.trim());
-
-    if (lines.length > MAX_ITEMS) {
-      setError(`Maximum ${MAX_ITEMS} items allowed. You have ${lines.length} URLs.`);
-      return;
-    }
-
-    const newItems: SequenceItem[] = [];
-    const startPosition = items.length; // Start positions after existing items
-
-    lines.forEach((line, index) => {
-      const { type, processedUrl } = detectUrlType(line);
-
-      if (type === 'video') {
-        // Check if it's YouTube or Drive
-        if (processedUrl.includes('youtube.com') || processedUrl.includes('youtu.be')) {
-          const videoId = extractYouTubeId(processedUrl);
-          // Check if we have title metadata from YouTube API import
-          const title = videoMetadata.get(processedUrl) || '';
-          newItems.push({
-            position: startPosition + index + 1,
-            type: 'video',
-            video_id: videoId,
-            url: processedUrl,
-            title: title
-          });
-        } else if (processedUrl.includes('drive.google.com')) {
-          // Drive video
-          const driveId = convertGoogleDriveVideoUrl(processedUrl);
-          newItems.push({
-            position: startPosition + index + 1,
-            type: 'video',
-            video_id: driveId,  // Drive file ID
-            url: processedUrl,
-            title: ''
-          });
-        } else {
-          // Unknown video type, skip
-          console.warn('Unknown video URL format:', processedUrl);
-        }
-      } else {
-        const convertedUrl = convertGoogleDriveUrl(processedUrl);
-        newItems.push({
-          position: startPosition + index + 1,
-          type: 'image',
-          image_url: convertedUrl,
-          alt_text: '',
-          narration: ''
-        });
-      }
-    });
-
-    // APPEND new items to existing items
-    setItems(prev => [...prev, ...newItems]);
-    setError(null);
-  };
-
   const handleImportDriveFolder = async () => {
     if (!folderUrl.trim()) {
       setImportError('Please enter a folder URL');
@@ -339,16 +523,45 @@ function NewSequencePageContent() {
         throw new Error(data.error || 'Failed to import folder');
       }
 
-      // Append imported URLs to existing content
-      const newUrls = data.urls.join('\n');
-      setBulkUrls(prev => prev ? `${prev}\n${newUrls}` : newUrls);
+      // Parse files and append directly to items
+      const newItems: SequenceItem[] = [];
+      const startPosition = items.length;
+
+      data.files.forEach((file: { url: string; name: string; mimeType: string }, index: number) => {
+        const { type, processedUrl } = detectUrlType(file.url);
+
+        if (type === 'video') {
+          if (processedUrl.includes('drive.google.com')) {
+            const driveId = convertGoogleDriveVideoUrl(processedUrl);
+            newItems.push({
+              position: startPosition + index + 1,
+              type: 'video',
+              video_id: driveId,
+              url: processedUrl,
+              title: file.name  // ← Use Drive file name as title
+            });
+          }
+        } else {
+          const convertedUrl = convertGoogleDriveUrl(processedUrl);
+          newItems.push({
+            position: startPosition + index + 1,
+            type: 'image',
+            image_url: convertedUrl,
+            alt_text: file.name,  // ← Use Drive file name as alt text
+            narration: ''
+          });
+        }
+      });
+
+      // Append to items
+      setItems(prev => [...prev, ...newItems]);
 
       // Close modal
       setShowImportModal(false);
       setFolderUrl('');
 
       // Show success message
-      setError(`✅ Imported ${data.count} files! Click "Update Sidebar" to add them.`);
+      setError(`✅ Imported ${data.count} files!`);
 
     } catch (err: any) {
       setImportError(err.message || 'Failed to import folder');
@@ -379,23 +592,32 @@ function NewSequencePageContent() {
         throw new Error(data.error || 'Failed to import playlist');
       }
 
-      // Store video metadata (URL → title mapping) for later use
-      const newMetadata = new Map(videoMetadata);
-      data.videos.forEach((v: any) => {
-        newMetadata.set(v.url, v.title);
-      });
-      setVideoMetadata(newMetadata);
+      // Create items directly from video data (already has full metadata!)
+      const newItems: SequenceItem[] = [];
+      const startPosition = items.length;
 
-      // Append video URLs to existing content
-      const videoUrls = data.videos.map((v: any) => v.url).join('\n');
-      setBulkUrls(prev => prev ? `${prev}\n${videoUrls}` : videoUrls);
+      data.videos.forEach((v: any, index: number) => {
+        newItems.push({
+          position: startPosition + index + 1,
+          type: 'video',
+          video_id: extractYouTubeId(v.url),
+          url: v.url,
+          title: v.title,
+          creator: v.creator,
+          thumbnail: v.thumbnail,
+          duration_seconds: v.duration_seconds
+        });
+      });
+
+      // Append to items
+      setItems(prev => [...prev, ...newItems]);
 
       // Close modal
       setShowPlaylistModal(false);
       setPlaylistUrl('');
 
       // Show success message
-      setError(`✅ Imported ${data.count} videos from playlist! Click "Update Sidebar" to add them.`);
+      setError(`✅ Imported ${data.count} videos from playlist!`);
 
     } catch (err: any) {
       setPlaylistError(err.message || 'Failed to import playlist');
@@ -404,27 +626,236 @@ function NewSequencePageContent() {
     }
   };
 
-  const handleReorderItem = (currentIndex: number, newPosition: number) => {
-    const pos = parseInt(String(newPosition));
-
-    // Validate
-    if (isNaN(pos) || pos < 1 || pos > items.length) {
+  const handleImportKidsChannel = async () => {
+    if (!kidsChannelUrl.trim()) {
+      setKidsChannelError('Please enter a YouTube Kids channel URL');
       return;
     }
 
-    // Same position, no change
-    if (pos === currentIndex + 1) {
+    setImportingKidsChannel(true);
+    setKidsChannelError(null);
+
+    try {
+      const response = await fetch('/api/extract-youtube-kids-channel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channelUrl: kidsChannelUrl })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to import YouTube Kids channel');
+      }
+
+      // Create items directly from video data
+      const newItems: SequenceItem[] = [];
+      const startPosition = items.length;
+
+      data.videos.forEach((v: any, index: number) => {
+        newItems.push({
+          position: startPosition + index + 1,
+          type: 'video',
+          video_id: v.video_id,
+          url: v.url,
+          title: v.title,
+          thumbnail: v.thumbnail
+        });
+      });
+
+      // Append to items
+      setItems(prev => [...prev, ...newItems]);
+
+      // Close modal
+      setShowKidsChannelModal(false);
+      setKidsChannelUrl('');
+
+      // Show success message
+      setError(`✅ Imported ${data.count} videos from YouTube Kids channel!`);
+
+    } catch (err: any) {
+      setKidsChannelError(err.message || 'Failed to import YouTube Kids channel');
+    } finally {
+      setImportingKidsChannel(false);
+    }
+  };
+
+  const handleImportFromModal = () => {
+    if (!modalBulkUrls.trim()) {
+      // Empty textarea = do nothing
+      setShowImportLinksModal(false);
+      setModalBulkUrls('');
       return;
     }
 
-    // Reorder: remove from old position, insert at new position
+    // Parse URLs from modal (same logic as handleParseBulkUrls)
+    const lines = modalBulkUrls.split(/[\n,]+/).filter(line => line.trim());
+
+    // Check total count (existing + new)
+    if (items.length + lines.length > MAX_ITEMS) {
+      setError(`Maximum ${MAX_ITEMS} items allowed. You have ${items.length} existing items and ${lines.length} new URLs = ${items.length + lines.length} total.`);
+      return;
+    }
+
+    const newItems: SequenceItem[] = [];
+    const startPosition = items.length; // Start positions after existing items
+
+    lines.forEach((line, index) => {
+      const { type, processedUrl } = detectUrlType(line);
+
+      if (type === 'video') {
+        // Check if it's YouTube or Drive
+        if (processedUrl.includes('youtube.com') || processedUrl.includes('youtu.be')) {
+          const videoId = extractYouTubeId(processedUrl);
+          // Check if we have full metadata from YouTube API import
+          const metadata: VideoMetadata | undefined = videoMetadata.get(processedUrl);
+          newItems.push({
+            position: startPosition + index + 1,
+            type: 'video',
+            video_id: videoId,
+            url: processedUrl,
+            title: metadata?.title || '',
+            creator: metadata?.creator || '',
+            thumbnail: metadata?.thumbnail || '',
+            duration_seconds: metadata?.duration_seconds || 0
+          });
+        } else if (processedUrl.includes('drive.google.com')) {
+          // Drive video
+          const driveId = convertGoogleDriveVideoUrl(processedUrl);
+          newItems.push({
+            position: startPosition + index + 1,
+            type: 'video',
+            video_id: driveId,  // Drive file ID
+            url: processedUrl,
+            title: ''
+          });
+        } else {
+          // Unknown video type, skip
+          console.warn('Unknown video URL format:', processedUrl);
+        }
+      } else {
+        const convertedUrl = convertGoogleDriveUrl(processedUrl);
+        newItems.push({
+          position: startPosition + index + 1,
+          type: 'image',
+          image_url: convertedUrl,
+          alt_text: '',
+          narration: ''
+        });
+      }
+    });
+
+    // APPEND new items to existing items
+    setItems(prev => [...prev, ...newItems]);
+
+    // Close modal and clear textarea
+    setShowImportLinksModal(false);
+    setModalBulkUrls('');
+
+    // Show success message
+    setError(`✅ Imported ${newItems.length} items!`);
+  };
+
+  const handleExportLinks = () => {
+    if (items.length === 0) {
+      setError('No items to export');
+      return;
+    }
+
+    // Generate URLs for all items
+    const urls = items.map(item => {
+      if (item.type === 'video') {
+        // Return original YouTube URL or construct from video_id
+        if (item.url) return item.url;
+        if (item.video_id && item.video_id.length === 11) {
+          return `https://youtube.com/watch?v=${item.video_id}`;
+        }
+        // Drive video
+        return `https://drive.google.com/file/d/${item.video_id}/view`;
+      } else {
+        // Image - return the original URL
+        return item.image_url || '';
+      }
+    }).filter(url => url);
+
+    // Copy to clipboard
+    const exportText = urls.join('\n');
+    navigator.clipboard.writeText(exportText).then(() => {
+      setError(`✅ Copied ${urls.length} links to clipboard!`);
+    }).catch(() => {
+      // Fallback: show in modal
+      setModalBulkUrls(exportText);
+      setShowImportLinksModal(true);
+      setError('Links ready in modal - copy from there');
+    });
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      setItems((items) => {
+        const oldIndex = parseInt(active.id as string);
+        const newIndex = parseInt(over.id as string);
+
+        const newItems = arrayMove(items, oldIndex, newIndex);
+
+        // Renumber positions
+        newItems.forEach((item, i) => {
+          item.position = i + 1;
+        });
+
+        return newItems;
+      });
+    }
+  };
+
+  const handleEditItemTitle = (index: number, newTitle: string) => {
+    setItems(prevItems => {
+      const updated = [...prevItems];
+      if (updated[index].type === 'video') {
+        updated[index].title = newTitle;
+      } else {
+        updated[index].alt_text = newTitle;
+      }
+      return updated;
+    });
+  };
+
+  const handleToggleExpand = () => {
+    const newExpanded = !itemsExpanded;
+    setItemsExpanded(newExpanded);
+
+    // When expanding, scroll to the items container after a brief delay
+    if (newExpanded) {
+      setTimeout(() => {
+        itemsContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    }
+  };
+
+  // Position modal handlers
+  const handlePositionClick = (index: number) => {
+    setSelectedItemIndex(index);
+    setNewPosition(String(index + 1));
+    setShowPositionModal(true);
+  };
+
+  const handleMoveToPosition = (targetPosition: number) => {
+    if (selectedItemIndex === null || targetPosition < 1 || targetPosition > items.length) return;
+
     const newItems = [...items];
-    const [movedItem] = newItems.splice(currentIndex, 1);
-    newItems.splice(pos - 1, 0, movedItem);
+    const [movedItem] = newItems.splice(selectedItemIndex, 1);
+    newItems.splice(targetPosition - 1, 0, movedItem);
 
-    // Renumber all items
-    newItems.forEach((item, i) => item.position = i + 1);
+    // Renumber all positions
+    newItems.forEach((item, i) => {
+      item.position = i + 1;
+    });
+
     setItems(newItems);
+    setShowPositionModal(false);
+    setSelectedItemIndex(null);
   };
 
   const handleDeleteItem = (index: number) => {
@@ -439,7 +870,7 @@ function NewSequencePageContent() {
     setItems(newItems);
   };
 
-  const handleSaveDraft = async (forcePublished?: boolean) => {
+  const handleSaveDraft = async (forcePublished?: boolean, silentSave = false) => {
     if (!title.trim()) {
       setError('Title is required');
       return;
@@ -480,9 +911,14 @@ function NewSequencePageContent() {
               description: description.trim(),
               reviewed: 'false',
               creator_id: user.id,
-              is_published: shouldPublish ? 'true' : 'false',  // ✅ Add this for view.html
+              is_published: shouldPublish ? 'true' : 'false',
               published_at: shouldPublish ? new Date().toISOString() : null,
-              items: validItems  // Save raw URLs, no proxy wrapping
+              items: validItems,
+              // Channel submission fields
+              creator_name: creatorName.trim() || null,
+              creator_link: creatorLink.trim() || null,
+              thumbnail_url: thumbnailUrl.trim() || null,
+              hashtags: hashtags.length > 0 ? hashtags : null
             }
           })
           .eq('id', editingId)
@@ -522,6 +958,13 @@ function NewSequencePageContent() {
         }
 
         setSuccess(true);
+        setHasUnsavedChanges(false); // Clear unsaved flag after successful save
+        localStorage.removeItem('sequence-draft'); // Clear draft after successful save
+
+        // Show success modal if published (but not for silent saves)
+        if (shouldPublish && !silentSave) {
+          setShowSuccessModal(true);
+        }
       } else {
         // CREATE MODE: Insert new project
         const baseSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -535,15 +978,20 @@ function NewSequencePageContent() {
             document_type: 'creative_work',
             tool_slug: 'sequence',
             story_slug: slug,
-            is_public: shouldPublish,  // Keep for backward compatibility
+            is_public: shouldPublish,
             document_data: {
               title: title.trim(),
               description: description.trim(),
               reviewed: 'false',
               creator_id: user.id,
-              is_published: shouldPublish ? 'true' : 'false',  // ✅ Add this for view.html
+              is_published: shouldPublish ? 'true' : 'false',
               published_at: shouldPublish ? new Date().toISOString() : null,
-              items: validItems  // Save raw URLs, no proxy wrapping
+              items: validItems,
+              // Channel submission fields
+              creator_name: creatorName.trim() || null,
+              creator_link: creatorLink.trim() || null,
+              thumbnail_url: thumbnailUrl.trim() || null,
+              hashtags: hashtags.length > 0 ? hashtags : null
             }
           })
           .select()
@@ -583,6 +1031,14 @@ function NewSequencePageContent() {
         }
 
         setSuccess(true);
+        setHasUnsavedChanges(false); // Clear unsaved flag after successful save
+        localStorage.removeItem('sequence-draft'); // Clear draft after successful save
+
+        // Show success modal if published (but not for silent saves)
+        if (shouldPublish && !silentSave) {
+          setShowSuccessModal(true);
+        }
+
         // Transition to edit mode
         router.push(`/dashboard/sequences/new?id=${insertData.id}`);
       }
@@ -646,6 +1102,7 @@ function NewSequencePageContent() {
       if (insertError) throw insertError;
 
       setSuccess(true);
+      localStorage.removeItem('sequence-draft'); // Clear draft after successful save
       // Redirect to edit the new project
       router.push(`/dashboard/sequences/new?id=${insertData.id}`);
     } catch (err) {
@@ -658,6 +1115,48 @@ function NewSequencePageContent() {
 
   return (
     <div className="min-h-screen bg-gray-900">
+      {/* Floating Save Button */}
+      {hasUnsavedChanges && !saving && (
+        <div className="fixed top-4 right-4 z-50 animate-pulse">
+          <button
+            onClick={() => handleSaveDraft(undefined, true)}
+            disabled={saving}
+            className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-lg font-semibold transition-all hover:scale-105"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+            </svg>
+            Save Changes
+          </button>
+        </div>
+      )}
+
+      {/* Floating Expand/Collapse Button */}
+      {items.length > 2 && (
+        <div className="fixed top-20 right-4 z-50">
+          <button
+            onClick={handleToggleExpand}
+            className="flex items-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg shadow-lg font-semibold transition-all hover:scale-105"
+          >
+            {itemsExpanded ? (
+              <>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                </svg>
+                Collapse Items
+              </>
+            ) : (
+              <>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+                Expand All ({items.length})
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-8">
           {/* Metadata */}
@@ -676,239 +1175,300 @@ function NewSequencePageContent() {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Description
-                </label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={2}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="A brief description..."
-                />
+              {/* Collapsible Details Section */}
+              <div className="border border-gray-700 rounded-lg">
+                <button
+                  onClick={() => setDetailsExpanded(!detailsExpanded)}
+                  className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-700/50 transition-colors rounded-lg"
+                >
+                  <span className="text-sm font-medium text-gray-300 flex items-center gap-2">
+                    <span>📝</span>
+                    Description & Optional Details
+                    {(description || creatorName || creatorLink || thumbnailUrl || hashtags.length > 0) && (
+                      <span className="text-xs text-green-400">(has content)</span>
+                    )}
+                  </span>
+                  <svg
+                    className={`w-5 h-5 text-gray-400 transition-transform ${detailsExpanded ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {detailsExpanded && (
+                  <div className="px-4 pb-4 space-y-4">
+                    {/* Description */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Description
+                      </label>
+                      <textarea
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        rows={2}
+                        className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="A brief description..."
+                      />
+                    </div>
+
+                    {/* Optional Fields Info */}
+                    <div className="bg-blue-900/20 border border-blue-700/30 rounded-lg p-3">
+                      <p className="text-xs text-blue-300">
+                        💡 These fields are optional but helpful when submitting to community channels.
+                      </p>
+                    </div>
+
+                    {/* Creator Name */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Creator Display Name
+                      </label>
+                      <input
+                        type="text"
+                        value={creatorName}
+                        onChange={(e) => setCreatorName(e.target.value)}
+                        className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="How you'd like to be credited"
+                      />
+                    </div>
+
+                    {/* Creator Link */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Creator Link (optional)
+                      </label>
+                      <input
+                        type="url"
+                        value={creatorLink}
+                        onChange={(e) => setCreatorLink(e.target.value)}
+                        className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="https://your-website.com"
+                      />
+                    </div>
+
+                    {/* Thumbnail URL */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Thumbnail URL (optional)
+                      </label>
+                      <input
+                        type="url"
+                        value={thumbnailUrl}
+                        onChange={(e) => setThumbnailUrl(e.target.value)}
+                        className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="https://drive.google.com/... or image URL"
+                      />
+                      {thumbnailUrl && (
+                        <div className="mt-2">
+                          <img
+                            src={`/api/proxy-image?url=${encodeURIComponent(thumbnailUrl)}`}
+                            alt="Thumbnail preview"
+                            className="h-20 w-auto rounded border border-gray-600"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Hashtags */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Hashtags (1-5 recommended for channels)
+                      </label>
+                      <div className="flex gap-2 mb-2">
+                        <input
+                          type="text"
+                          value={hashtagInput}
+                          onChange={(e) => setHashtagInput(e.target.value.replace(/[^a-zA-Z0-9]/g, ''))}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && hashtagInput.trim() && hashtags.length < 5) {
+                              e.preventDefault();
+                              setHashtags([...hashtags, hashtagInput.trim().toLowerCase()]);
+                              setHashtagInput('');
+                            }
+                          }}
+                          className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Type and press Enter"
+                          disabled={hashtags.length >= 5}
+                        />
+                        <button
+                          onClick={() => {
+                            if (hashtagInput.trim() && hashtags.length < 5) {
+                              setHashtags([...hashtags, hashtagInput.trim().toLowerCase()]);
+                              setHashtagInput('');
+                            }
+                          }}
+                          disabled={!hashtagInput.trim() || hashtags.length >= 5}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Add
+                        </button>
+                      </div>
+                      {hashtags.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {hashtags.map((tag, index) => (
+                            <span
+                              key={index}
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-purple-600/30 text-purple-300 rounded-full text-sm"
+                            >
+                              #{tag}
+                              <button
+                                onClick={() => setHashtags(hashtags.filter((_, i) => i !== index))}
+                                className="ml-1 text-purple-400 hover:text-white"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Main Content Area - Two Columns */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Left: Bulk URL Input */}
-            <div className="lg:col-span-2 bg-gray-800 rounded-lg shadow-lg p-6">
-              <h2 className="text-lg font-semibold text-white mb-4">Add Content</h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Paste URLs (one per line or comma-separated)
-                  </label>
-                  <textarea
-                    value={bulkUrls}
-                    onChange={(e) => setBulkUrls(e.target.value)}
-                    placeholder="Paste URLs here... (one per line or comma-separated)&#10;&#10;Examples:&#10;https://drive.google.com/file/d/abc123/view&#10;https://youtube.com/watch?v=abc123&#10;video: https://drive.google.com/file/d/abc123/view"
-                    className="w-full h-[40vh] px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                  />
-                  <p className="text-xs text-gray-500 mt-2">
-                    ✨ Auto-detects YouTube videos. Drive defaults to images. Prefix with <code className="bg-gray-600 px-1 rounded">video:</code> for Drive videos.
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleParseBulkUrls}
-                    disabled={!bulkUrls.trim() || items.length >= MAX_ITEMS}
-                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    Update Sidebar →
-                  </button>
-                  <button
-                    onClick={() => setShowImportModal(true)}
-                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors whitespace-nowrap"
-                    title="Import all files from a Drive folder"
-                  >
-                    📁 Import Folder
-                  </button>
-                  <button
-                    onClick={() => setShowPlaylistModal(true)}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors whitespace-nowrap"
-                    title="Import all videos from a YouTube playlist"
-                  >
-                    🎬 Import Playlist
-                  </button>
-                </div>
-              </div>
+          {/* Import/Export Content Buttons */}
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
+            <h2 className="text-xl font-semibold text-white mb-4">Import / Export</h2>
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => setShowImportLinksModal(true)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+              >
+                📋 Import Links
+              </button>
+              <button
+                onClick={handleExportLinks}
+                disabled={items.length === 0}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+              >
+                📤 Export Links
+              </button>
+              <button
+                onClick={() => setShowImportModal(true)}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
+              >
+                📁 Import Folder
+              </button>
+              <button
+                onClick={() => setShowPlaylistModal(true)}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
+              >
+                🎬 Import Playlist
+              </button>
+              <button
+                onClick={() => setShowKidsChannelModal(true)}
+                className="px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition-colors flex items-center gap-2"
+              >
+                📺 YouTube Kids Channel
+              </button>
             </div>
+          </div>
 
-            {/* Right: Scrollable Sidebar with Items */}
-            <div className="bg-gray-800 rounded-lg shadow-lg p-6">
-              <h2 className="text-lg font-semibold text-white mb-4">
+          {/* Draggable Item Cards */}
+          <div ref={itemsContainerRef} className="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-white">
                 Items ({items.length}/{MAX_ITEMS})
               </h2>
-
-              {items.length === 0 ? (
-                <div className="text-center py-12 text-gray-500">
-                  <p className="text-sm">No items yet</p>
-                  <p className="text-xs mt-1">Paste URLs to get started</p>
-                </div>
-              ) : (
-                <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
-                  {items.map((item, index) => (
-                    <div
-                      key={index}
-                      className="bg-gray-700 rounded-lg p-3 border border-gray-600"
-                    >
-                      <div className="flex items-start gap-2 mb-2">
-                        {/* Number Input */}
-                        <input
-                          type="number"
-                          min="1"
-                          max={items.length}
-                          value={item.position}
-                          onChange={(e) => handleReorderItem(index, parseInt(e.target.value))}
-                          className="w-14 px-2 py-1 bg-gray-600 border border-gray-500 rounded text-white text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-
-                        {/* Type Icon */}
-                        <div className="flex-shrink-0 w-8 h-8 bg-gray-600 rounded flex items-center justify-center">
-                          <span className="text-lg">{item.type === 'image' ? '📷' : '🎥'}</span>
-                        </div>
-
-                        {/* File Name/Title Preview */}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs text-gray-400 truncate" title={item.type === 'image' ? item.image_url : item.url}>
-                            {(() => {
-                              // Extract filename from URL
-                              const url = item.type === 'image' ? item.image_url : item.url;
-                              if (!url) return 'Item';
-
-                              try {
-                                if (url.includes('drive.google.com')) {
-                                  // Extract Drive file ID as identifier
-                                  const idMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
-                                  return idMatch ? `Drive: ${idMatch[1].substring(0, 12)}...` : 'Drive file';
-                                } else if (url.includes('youtube.com') || url.includes('youtu.be')) {
-                                  // For YouTube, show video ID
-                                  const videoIdMatch = url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-                                  return videoIdMatch ? `YT: ${videoIdMatch[1]}` : 'YouTube';
-                                } else {
-                                  // Try to get filename from URL path
-                                  const urlParts = url.split('/');
-                                  const lastPart = urlParts[urlParts.length - 1];
-                                  if (lastPart) {
-                                    // Remove query params and decode
-                                    const fileName = decodeURIComponent(lastPart.split('?')[0]);
-                                    // Truncate if too long
-                                    return fileName.length > 30 ? fileName.substring(0, 27) + '...' : fileName;
-                                  }
-                                }
-                              } catch (e) {
-                                console.warn('Error extracting filename:', e);
-                              }
-                              return 'File';
-                            })()}
-                          </p>
-                        </div>
-
-                        {/* Delete Button */}
-                        <button
-                          onClick={() => handleDeleteItem(index)}
-                          className="flex-shrink-0 px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-xs"
-                        >
-                          ×
-                        </button>
-                      </div>
-
-                      {/* Thumbnail */}
-                      {item.type === 'image' && item.image_url && (
-                        <img
-                          src={`/api/proxy-image?url=${encodeURIComponent(item.image_url)}`}
-                          alt={item.alt_text || `Item ${item.position}`}
-                          className="w-full h-20 object-contain rounded border border-gray-600 mb-2 bg-gray-700"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                          }}
-                        />
-                      )}
-                      {item.type === 'video' && item.video_id && item.video_id.length === 11 && (
-                        <img
-                          src={`https://img.youtube.com/vi/${item.video_id}/mqdefault.jpg`}
-                          alt={item.title || `Video ${item.position}`}
-                          className="w-full h-20 object-contain rounded border border-gray-600 mb-2 bg-gray-700"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                          }}
-                        />
-                      )}
-
-                      {/* Quick Edit Fields */}
-                      {item.type === 'image' && (
-                        <input
-                          type="text"
-                          value={item.alt_text || ''}
-                          onChange={(e) => handleItemChange(index, 'alt_text', e.target.value)}
-                          placeholder="Alt text (optional)"
-                          className="w-full px-2 py-1 bg-gray-600 border border-gray-500 rounded text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        />
-                      )}
-                      {item.type === 'video' && (
-                        <input
-                          type="text"
-                          value={item.title || ''}
-                          onChange={(e) => handleItemChange(index, 'title', e.target.value)}
-                          placeholder="Title (optional)"
-                          className="w-full px-2 py-1 bg-gray-600 border border-gray-500 rounded text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        />
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
+
+            {items.length === 0 ? (
+              <p className="text-gray-400 text-center py-8">
+                No items yet. Click "Import Links" to get started.
+              </p>
+            ) : (
+              <div className={itemsExpanded ? '' : 'max-h-[400px] overflow-hidden'}>
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                >
+                  <SortableContext
+                    items={items.map((_, i) => i.toString())}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {(itemsExpanded ? items : items.slice(0, 2)).map((item, index) => (
+                      <SortableItemCard
+                        key={index}
+                        id={index.toString()}
+                        item={item}
+                        index={index}
+                        onDelete={() => handleDeleteItem(index)}
+                        onEditTitle={(newTitle) => handleEditItemTitle(index, newTitle)}
+                        onPositionClick={() => handlePositionClick(index)}
+                      />
+                    ))}
+                  </SortableContext>
+                </DndContext>
+
+                {!itemsExpanded && items.length > 2 && (
+                  <div className="text-center mt-4 pt-4 border-t border-gray-700">
+                    <p className="text-gray-400 text-sm mb-3">
+                      {items.length - 2} more item{items.length - 2 !== 1 ? 's' : ''} hidden
+                    </p>
+                    <button
+                      onClick={handleToggleExpand}
+                      className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold transition-colors flex items-center gap-2 mx-auto"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                      Expand All ({items.length})
+                    </button>
+                  </div>
+                )}
+
+                {itemsExpanded && items.length > 2 && (
+                  <div className="text-center mt-4 pt-4 border-t border-gray-700">
+                    <button
+                      onClick={handleToggleExpand}
+                      className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold transition-colors flex items-center gap-2 mx-auto"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                      </svg>
+                      Collapse Items
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Actions */}
           <div className="bg-gray-800 rounded-lg shadow-lg p-6">
-            {/* Success/Error Notifications */}
-            {success && publishedUrl && (
-              <div className="mb-6 bg-green-900/20 border border-green-500 rounded-lg p-4">
-                <h3 className="text-green-400 font-semibold mb-2">
-                  ✅ Project Published!
+            {/* Warning message for reported content */}
+            {isReported && (
+              <div className="bg-red-900/50 border border-red-700 rounded-lg p-6 mb-6">
+                <h3 className="text-lg font-semibold text-red-200 mb-3 flex items-center gap-2">
+                  <span>⚠️</span> Content Reported
                 </h3>
-                <p className="text-sm text-gray-300 mb-3">
-                  Your project is now live. Share this link:
+                <p className="text-red-200 mb-3">
+                  This content has been reported by a viewer and cannot be published until reviewed by an administrator.
                 </p>
-                <div className="flex items-center gap-2 mb-3">
-                  <input
-                    type="text"
-                    value={publishedUrl}
-                    readOnly
-                    className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white font-mono text-sm"
-                    onClick={(e) => (e.target as HTMLInputElement).select()}
-                  />
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(publishedUrl);
-                      alert('Link copied to clipboard!');
-                    }}
-                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                  >
-                    📋 Copy
-                  </button>
+                <p className="text-red-200 text-sm">
+                  If you believe this was done in error, please email{' '}
                   <a
-                    href={publishedUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+                    href="mailto:pp@playfulprocess.com"
+                    className="text-red-300 hover:text-red-100 underline font-semibold"
                   >
-                    🔗 View
+                    pp@playfulprocess.com
                   </a>
-                </div>
-                <p className="text-xs text-gray-500">
-                  ⚠️ This link is public. Anyone with it can view your project.
+                  {' '}to appeal.
                 </p>
               </div>
             )}
 
             {/* License Agreement - Show before publishing */}
-            {!isPublished && (
+            {!isPublished && !isReported && (
               <div className="bg-purple-900/30 border border-purple-700/50 rounded-lg p-6 mb-6">
                 <h3 className="text-lg font-semibold text-white mb-3">
                   📖 Publishing Your Content
@@ -931,7 +1491,7 @@ function NewSequencePageContent() {
                   </li>
                 </ul>
                 <p className="text-gray-300 text-sm mb-4 italic">
-                  Without direct attribution to YouTube or another license, content will be assumed to be published under Creative Commons BY-SA 4.0.
+                  Without direct attribution to YouTube or another license on the content itself, content will be assumed to be published under Creative Commons BY-SA 4.0.
                 </p>
 
                 <label className="flex items-start gap-3 cursor-pointer">
@@ -968,7 +1528,7 @@ function NewSequencePageContent() {
 
               <button
                 onClick={() => handleSaveDraft(true)}  // Force to published mode
-                disabled={saving || !title.trim() || items.length === 0 || !licenseAgreed}
+                disabled={saving || !title.trim() || items.length === 0 || !licenseAgreed || isReported}
                 className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {saving ? 'Publishing...' : (editingId && isPublished ? 'Update Published' : '🌐 Publish')}
@@ -997,50 +1557,6 @@ function NewSequencePageContent() {
               </div>
             )}
 
-            {/* Success modal with Submit to Community button */}
-            {success && isPublished && publishedUrl && (
-              <div className="mt-6 bg-green-900/50 border border-green-700 rounded-lg p-6">
-                <h3 className="text-xl font-bold text-green-200 mb-3">
-                  🎉 Published Successfully!
-                </h3>
-                <p className="text-gray-300 mb-4">
-                  Your content is now live at:{' '}
-                  <a
-                    href={publishedUrl}
-                    target="_blank"
-                    rel="noopener"
-                    className="text-purple-400 hover:text-purple-300 underline font-semibold break-all"
-                  >
-                    {publishedUrl}
-                  </a>
-                </p>
-
-                {/* Submit to Community Channel button */}
-                <div className="bg-gray-800 border border-purple-700/50 rounded-lg p-4">
-                  <h4 className="font-semibold text-white mb-2">
-                    📢 Share with the Community
-                  </h4>
-                  <p className="text-sm text-gray-300 mb-3">
-                    Submit your content to the Kids Stories channel so other families can discover it!
-                  </p>
-                  <p className="text-xs text-gray-400 mb-3 italic">
-                    💡 You can also share links from trusted sources like Goodreads (book recommendations),
-                    Claude/ChatGPT (AI tools), Amazon (products), or Google Drive (shared files).
-                  </p>
-                  <button
-                    onClick={() => setShowChannelSelectModal(true)}
-                    className="inline-block px-6 py-2 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition-colors"
-                  >
-                    📢 Submit to Channel →
-                  </button>
-                  <p className="text-xs text-gray-500 mt-2">
-                    Opens in channels.recursive.eco with your content pre-filled.
-                    You can review before submitting.
-                  </p>
-                </div>
-              </div>
-            )}
-
             {error && (
               <div className="mt-6 bg-red-900/50 border border-red-700 rounded-lg p-4">
                 <p className="text-red-200">{error}</p>
@@ -1063,6 +1579,219 @@ function NewSequencePageContent() {
           )}
         </div>
       </main>
+
+      {/* Import Links Modal (Bulk URL Import) */}
+      {showImportLinksModal && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-semibold text-white">Import Links</h3>
+              <button
+                onClick={() => {
+                  setShowImportLinksModal(false);
+                  setModalBulkUrls('');
+                }}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Paste URLs (one per line or comma-separated)
+                </label>
+                <textarea
+                  value={modalBulkUrls}
+                  onChange={(e) => setModalBulkUrls(e.target.value)}
+                  placeholder="https://youtube.com/watch?v=VIDEO_ID&#10;https://drive.google.com/file/d/FILE_ID/view&#10;https://i.imgur.com/image.jpg"
+                  className="w-full h-64 px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  autoFocus
+                />
+                <p className="text-xs text-gray-400 mt-2">
+                  💡 Supports YouTube videos, Google Drive images/videos, and direct image URLs
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowImportLinksModal(false);
+                    setModalBulkUrls('');
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleImportFromModal}
+                  disabled={!modalBulkUrls.trim()}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Import
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Modal - Appears after publishing */}
+      {showSuccessModal && publishedUrl && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg shadow-2xl max-w-lg w-full p-8 border border-green-500/30">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold text-green-400 flex items-center gap-3">
+                <span>🎉</span>
+                Published Successfully!
+              </h3>
+              <button
+                onClick={() => setShowSuccessModal(false)}
+                className="text-gray-400 hover:text-white transition-colors text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Published URL */}
+            <div className="mb-6">
+              <p className="text-gray-300 text-sm mb-3">Your content is now live at:</p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={publishedUrl}
+                  readOnly
+                  className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white font-mono text-sm"
+                  onClick={(e) => (e.target as HTMLInputElement).select()}
+                />
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(publishedUrl);
+                    alert('Link copied!');
+                  }}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+                  title="Copy link"
+                >
+                  📋
+                </button>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="space-y-3">
+              <a
+                href={publishedUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block w-full px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold text-center transition-colors"
+              >
+                🔗 View Published Content
+              </a>
+
+              <button
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  setShowChannelSelectModal(true);
+                }}
+                className="block w-full px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors"
+              >
+                📢 Submit to Channel →
+              </button>
+
+              <p className="text-xs text-gray-400 text-center mt-2">
+                Submit to channels.recursive.eco to share with the community
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Position Change Modal */}
+      {showPositionModal && selectedItemIndex !== null && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6 border border-purple-500/30">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                <span>🎯</span>
+                Move Item
+              </h3>
+              <button
+                onClick={() => {
+                  setShowPositionModal(false);
+                  setSelectedItemIndex(null);
+                }}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-gray-300 text-sm mb-4">
+                Current position: <span className="font-bold text-purple-400">#{selectedItemIndex + 1}</span> of {items.length}
+              </p>
+
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                New Position
+              </label>
+              <input
+                type="number"
+                min="1"
+                max={items.length}
+                value={newPosition}
+                onChange={(e) => setNewPosition(e.target.value)}
+                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                placeholder="Enter position (1-{items.length})"
+              />
+            </div>
+
+            {/* Quick Actions */}
+            <div className="space-y-2 mb-4">
+              <button
+                onClick={() => handleMoveToPosition(1)}
+                className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors flex items-center justify-center gap-2"
+              >
+                <span>⬆️</span>
+                Move to Beginning
+              </button>
+
+              <button
+                onClick={() => handleMoveToPosition(items.length)}
+                className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors flex items-center justify-center gap-2"
+              >
+                <span>⬇️</span>
+                Move to End
+              </button>
+
+              <button
+                onClick={() => {
+                  const pos = parseInt(newPosition);
+                  if (!isNaN(pos)) {
+                    handleMoveToPosition(pos);
+                  }
+                }}
+                disabled={!newPosition || parseInt(newPosition) < 1 || parseInt(newPosition) > items.length}
+                className="w-full px-4 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg font-semibold transition-colors flex items-center justify-center gap-2"
+              >
+                <span>↔️</span>
+                Move to Position {newPosition || '...'}
+              </button>
+            </div>
+
+            <button
+              onClick={() => {
+                setShowPositionModal(false);
+                setSelectedItemIndex(null);
+              }}
+              className="w-full px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Import Drive Folder Modal */}
       {showImportModal && (
@@ -1215,19 +1944,98 @@ function NewSequencePageContent() {
             </p>
 
             <div className="space-y-3">
-              {AVAILABLE_CHANNELS.map((channel) => (
-                <a
-                  key={channel.id}
-                  href={`https://channels.recursive.eco/channels/${channel.id}?doc_id=${publishedDocId}&channel=${channel.id}`}
-                  target="_blank"
-                  rel="noopener"
-                  onClick={() => setShowChannelSelectModal(false)}
-                  className="block w-full text-left p-4 bg-gray-700 hover:bg-gray-600 rounded-lg border border-gray-600 hover:border-purple-500 transition-all"
+              {AVAILABLE_CHANNELS.map((channel) => {
+                // Build URL with all submission fields
+                const params = new URLSearchParams();
+                params.set('doc_id', publishedDocId || '');
+                params.set('channel', channel.id);
+                params.set('title', title);
+                if (description) params.set('description', description);
+                if (creatorName) params.set('creator_name', creatorName);
+                if (creatorLink) params.set('creator_link', creatorLink);
+                if (thumbnailUrl) params.set('thumbnail_url', thumbnailUrl);
+                if (hashtags.length > 0) params.set('hashtags', hashtags.join(','));
+
+                return (
+                  <a
+                    key={channel.id}
+                    href={`https://channels.recursive.eco/channels/${channel.id}?${params.toString()}`}
+                    target="_blank"
+                    rel="noopener"
+                    onClick={() => setShowChannelSelectModal(false)}
+                    className="block w-full text-left p-4 bg-gray-700 hover:bg-gray-600 rounded-lg border border-gray-600 hover:border-purple-500 transition-all"
+                  >
+                    <h4 className="font-semibold text-white mb-1">{channel.name}</h4>
+                    <p className="text-sm text-gray-400">{channel.description}</p>
+                  </a>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import YouTube Kids Channel Modal */}
+      {showKidsChannelModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg shadow-xl max-w-lg w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-semibold text-white">Import YouTube Kids Channel</h3>
+              <button
+                onClick={() => {
+                  setShowKidsChannelModal(false);
+                  setKidsChannelUrl('');
+                  setKidsChannelError(null);
+                }}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  YouTube Kids Channel URL
+                </label>
+                <input
+                  type="text"
+                  value={kidsChannelUrl}
+                  onChange={(e) => setKidsChannelUrl(e.target.value)}
+                  placeholder="https://www.youtubekids.com/channel/UC..."
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-pink-500"
+                  autoFocus
+                />
+                <p className="text-xs text-gray-400 mt-2">
+                  Paste a YouTube Kids channel URL to import all videos (max 50)
+                </p>
+              </div>
+
+              {kidsChannelError && (
+                <div className="px-4 py-3 bg-red-900/20 border border-red-500 rounded-lg text-red-400 text-sm">
+                  {kidsChannelError}
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowKidsChannelModal(false);
+                    setKidsChannelUrl('');
+                    setKidsChannelError(null);
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
                 >
-                  <h4 className="font-semibold text-white mb-1">{channel.name}</h4>
-                  <p className="text-sm text-gray-400">{channel.description}</p>
-                </a>
-              ))}
+                  Cancel
+                </button>
+                <button
+                  onClick={handleImportKidsChannel}
+                  disabled={importingKidsChannel || !kidsChannelUrl.trim()}
+                  className="flex-1 px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {importingKidsChannel ? 'Importing...' : 'Import Videos'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

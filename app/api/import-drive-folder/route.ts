@@ -96,20 +96,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Convert to direct URLs
-    const urls = mediaFiles.map((file: any) => {
+    // Convert to direct URLs with file names
+    const filesWithNames = mediaFiles.map((file: any) => {
+      let url;
       if (file.mimeType.startsWith('video/')) {
         // Videos need the "video:" prefix for type detection
-        return `video: https://drive.google.com/file/d/${file.id}/view`;
+        url = `video: https://drive.google.com/file/d/${file.id}/view`;
       } else {
         // Images use the uc?export=view format
-        return `https://drive.google.com/uc?export=view&id=${file.id}`;
+        url = `https://drive.google.com/uc?export=view&id=${file.id}`;
       }
+
+      return {
+        url,
+        name: file.name,
+        mimeType: file.mimeType
+      };
     });
 
     return NextResponse.json({
-      urls,
-      count: urls.length
+      files: filesWithNames,
+      count: filesWithNames.length
     });
 
   } catch (error) {

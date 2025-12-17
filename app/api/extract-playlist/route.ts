@@ -61,12 +61,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Extract video IDs and titles
-    const videos = data.items.map((item: any) => ({
-      video_id: item.snippet.resourceId.videoId,
+    // Step 1: Extract video IDs from playlist
+    const videoIds = data.items.map((item: any) => item.snippet.resourceId.videoId);
+
+    // Step 2: Fetch full metadata for all videos (batch request)
+    const videosResponse = await fetch(
+      `https://www.googleapis.com/youtube/v3/videos?` +
+      `part=snippet,contentDetails&id=${videoIds.join(',')}&key=${apiKey}`
+    );
+
+    if (!videosResponse.ok) {
+      console.error('YouTube videos API error');
+      // Fallback to basic data if videos endpoint fails
+      const videos = data.items.map((item: any) => ({
+        video_id: item.snippet.resourceId.videoId,
+        title: item.snippet.title,
+        url: `https://youtube.com/watch?v=${item.snippet.resourceId.videoId}`,
+        thumbnail: item.snippet.thumbnails?.default?.url || ''
+      }));
+      return NextResponse.json({ videos, count: videos.length });
+    }
+
+    const videosData = await videosResponse.json();
+
+    // Step 3: Combine data with full metadata
+    const videos = videosData.items.map((item: any) => ({
+      video_id: item.id,
       title: item.snippet.title,
-      url: `https://youtube.com/watch?v=${item.snippet.resourceId.videoId}`,
-      thumbnail: item.snippet.thumbnails?.default?.url || ''
+      creator: item.snippet.channelTitle,
+      url: `https://youtube.com/watch?v=${item.id}`,
+      thumbnail: item.snippet.thumbnails?.medium?.url || item.snippet.thumbnails?.default?.url || '',
+      duration_seconds: parseDuration(item.contentDetails.duration)
     }));
 
     return NextResponse.json({
@@ -104,4 +129,18 @@ function extractPlaylistId(url: string): string | null {
   }
 
   return null;
+}
+
+function parseDuration(isoDuration: string): number {
+  // Parse ISO 8601 duration (e.g., "PT7M32S" -> 452 seconds)
+  const regex = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/;
+  const matches = isoDuration.match(regex);
+
+  if (!matches) return 0;
+
+  const hours = parseInt(matches[1]) || 0;
+  const minutes = parseInt(matches[2]) || 0;
+  const seconds = parseInt(matches[3]) || 0;
+
+  return hours * 3600 + minutes * 60 + seconds;
 }
