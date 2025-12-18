@@ -37,11 +37,31 @@ interface SequenceCardProps {
   onDuplicate: (id: string) => void;
 }
 
-function getProxiedImageUrl(url: string): string {
-  if (url.includes('drive.google.com') || url.includes('googleusercontent.com')) {
-    return `/api/proxy-image?url=${encodeURIComponent(url)}`;
+// Convert Google Drive sharing URLs to direct image URLs
+function convertGoogleDriveUrl(url: string): string {
+  const drivePatterns = [
+    /drive\.google\.com\/file\/d\/([^\/]+)/,
+    /drive\.google\.com\/open\?id=([^&]+)/,
+  ];
+
+  for (const pattern of drivePatterns) {
+    const match = url.match(pattern);
+    if (match && match[1]) {
+      return `https://drive.google.com/uc?export=view&id=${match[1]}`;
+    }
   }
+
   return url;
+}
+
+function getProxiedImageUrl(url: string): string {
+  // First convert Drive sharing URLs to direct URLs
+  const convertedUrl = convertGoogleDriveUrl(url);
+
+  if (convertedUrl.includes('drive.google.com') || convertedUrl.includes('googleusercontent.com')) {
+    return `/api/proxy-image?url=${encodeURIComponent(convertedUrl)}`;
+  }
+  return convertedUrl;
 }
 
 function getThumbnailUrl(props: SequenceCardProps): string | null {
