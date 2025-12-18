@@ -377,10 +377,12 @@ function NewSequencePageContent() {
         creatorNameValue = toolsData.tool_data.submitted_by || '';
         creatorLinkValue = toolsData.tool_data.creator_link || '';
         thumbnailUrlValue = toolsData.tool_data.thumbnail || '';
-        if (toolsData.tool_data.hashtags) {
-          hashtagsValue = Array.isArray(toolsData.tool_data.hashtags)
-            ? toolsData.tool_data.hashtags
-            : toolsData.tool_data.hashtags.split(',').map((h: string) => h.trim());
+        // Note: hashtags are stored as 'category' in tools table (from SubmitToolModal)
+        const toolsHashtags = toolsData.tool_data.category || toolsData.tool_data.hashtags;
+        if (toolsHashtags) {
+          hashtagsValue = Array.isArray(toolsHashtags)
+            ? toolsHashtags
+            : toolsHashtags.split(',').map((h: string) => h.trim());
         }
       }
 
@@ -1325,7 +1327,7 @@ function NewSequencePageContent() {
                       {thumbnailUrl && (
                         <div className="mt-2">
                           <img
-                            src={`/api/proxy-image?url=${encodeURIComponent(thumbnailUrl)}`}
+                            src={`/api/proxy-image?url=${encodeURIComponent(convertGoogleDriveUrl(thumbnailUrl))}`}
                             alt="Thumbnail preview"
                             className="h-20 w-auto rounded border border-gray-600"
                             onError={(e) => {
@@ -2031,21 +2033,26 @@ function NewSequencePageContent() {
                 if (creatorLink) params.set('creator_link', creatorLink);
 
                 // Priority for thumbnail:
-                // 1. First YouTube video thumbnail (most reliable)
+                // 1. User-provided thumbnailUrl (Drive link or other URL)
                 // 2. Item with explicit thumbnail field
-                // 3. Manually set thumbnailUrl
+                // 3. First YouTube video thumbnail (fallback)
                 let submissionThumbnail = thumbnailUrl;
-                const firstVideoItem = items.find(item =>
-                  item.type === 'video' && item.video_id && item.video_id.length === 11
-                );
-                if (firstVideoItem?.video_id) {
-                  // Use YouTube's high quality thumbnail URL
-                  submissionThumbnail = `https://i.ytimg.com/vi/${firstVideoItem.video_id}/mqdefault.jpg`;
-                } else if (!submissionThumbnail) {
+
+                if (!submissionThumbnail) {
                   // Check if any item has an explicit thumbnail
                   const itemWithThumbnail = items.find(item => item.thumbnail);
                   if (itemWithThumbnail?.thumbnail) {
                     submissionThumbnail = itemWithThumbnail.thumbnail;
+                  }
+                }
+
+                if (!submissionThumbnail) {
+                  // Fallback to first YouTube video thumbnail
+                  const firstVideoItem = items.find(item =>
+                    item.type === 'video' && item.video_id && item.video_id.length === 11
+                  );
+                  if (firstVideoItem?.video_id) {
+                    submissionThumbnail = `https://i.ytimg.com/vi/${firstVideoItem.video_id}/mqdefault.jpg`;
                   }
                 }
 
