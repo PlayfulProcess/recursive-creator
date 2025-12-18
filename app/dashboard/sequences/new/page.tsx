@@ -352,14 +352,70 @@ function NewSequencePageContent() {
 
       if (error) throw error;
 
-      setTitle(data.document_data.title || '');
-      setDescription(data.document_data.description || '');
+      // Load channel fields - check tools table FIRST (most recent), then fall back to user_documents
+      let titleValue = data.document_data.title || '';
+      let descriptionValue = data.document_data.description || '';
+      let creatorNameValue = '';
+      let creatorLinkValue = '';
+      let thumbnailUrlValue = '';
+      let hashtagsValue: string[] = [];
 
-      // Load optional channel submission fields
-      setCreatorName(data.document_data.creator_name || data.document_data.author || '');
-      setCreatorLink(data.document_data.creator_link || '');
-      setThumbnailUrl(data.document_data.thumbnail_url || '');
-      setHashtags(data.document_data.hashtags || []);
+      // Step 1: Try to get from tools table (channel submissions have most recent data)
+      const { data: toolsData } = await supabase
+        .from('tools')
+        .select('tool_data')
+        .ilike('tool_data->>url', `%${id}%`)
+        .eq('tool_data->>is_active', 'true')
+        .limit(1)
+        .single();
+
+      if (toolsData?.tool_data) {
+        console.log('Found channel submission data (priority):', toolsData.tool_data);
+        // Pull ALL fields from tools table (these take priority over user_documents)
+        if (toolsData.tool_data.name) titleValue = toolsData.tool_data.name;
+        if (toolsData.tool_data.description) descriptionValue = toolsData.tool_data.description;
+        creatorNameValue = toolsData.tool_data.submitted_by || '';
+        creatorLinkValue = toolsData.tool_data.creator_link || '';
+        thumbnailUrlValue = toolsData.tool_data.thumbnail || '';
+        // Note: hashtags are stored as 'category' in tools table (from SubmitToolModal)
+        const toolsHashtags = toolsData.tool_data.category || toolsData.tool_data.hashtags;
+        if (toolsHashtags) {
+          hashtagsValue = Array.isArray(toolsHashtags)
+            ? toolsHashtags
+            : toolsHashtags.split(',').map((h: string) => h.trim());
+        }
+      }
+
+      // Step 2: Fall back to user_documents for any missing fields
+      if (!creatorNameValue) {
+        creatorNameValue = data.document_data.creator_name || data.document_data.author || '';
+      }
+      if (!creatorLinkValue) {
+        creatorLinkValue = data.document_data.creator_link || '';
+      }
+      if (!thumbnailUrlValue) {
+        thumbnailUrlValue = data.document_data.thumbnail_url || '';
+      }
+      if (!hashtagsValue.length) {
+        hashtagsValue = data.document_data.hashtags || [];
+      }
+
+      console.log('Final channel fields (tools → user_documents fallback):', {
+        title: titleValue,
+        description: descriptionValue,
+        creator_name: creatorNameValue,
+        creator_link: creatorLinkValue,
+        thumbnail_url: thumbnailUrlValue,
+        hashtags: hashtagsValue
+      });
+
+      // Set all state
+      setTitle(titleValue);
+      setDescription(descriptionValue);
+      setCreatorName(creatorNameValue);
+      setCreatorLink(creatorLinkValue);
+      setThumbnailUrl(thumbnailUrlValue);
+      setHashtags(hashtagsValue);
 
       // Check if published (from document_data.is_published)
       const isPublishedValue = data.document_data.is_published === 'true';
@@ -1122,9 +1178,9 @@ function NewSequencePageContent() {
 
   return (
     <div className="min-h-screen bg-gray-900">
-      {/* Floating Save Button */}
+      {/* Floating Save Button - Centered on mobile, right on desktop */}
       {hasUnsavedChanges && !saving && (
-        <div className="fixed top-4 right-4 z-50 animate-pulse">
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 sm:left-auto sm:translate-x-0 sm:right-4 z-50 animate-pulse">
           <button
             onClick={() => handleSaveDraft(undefined, true)}
             disabled={saving}
@@ -1271,7 +1327,7 @@ function NewSequencePageContent() {
                       {thumbnailUrl && (
                         <div className="mt-2">
                           <img
-                            src={`/api/proxy-image?url=${encodeURIComponent(thumbnailUrl)}`}
+                            src={`/api/proxy-image?url=${encodeURIComponent(convertGoogleDriveUrl(thumbnailUrl))}`}
                             alt="Thumbnail preview"
                             className="h-20 w-auto rounded border border-gray-600"
                             onError={(e) => {
@@ -1970,10 +2026,37 @@ function NewSequencePageContent() {
                 params.set('doc_id', publishedDocId || '');
                 params.set('channel', channel.id);
                 params.set('title', title);
+                // Include full URL for the content
+                params.set('url', `https://recursive.eco/view/${publishedDocId}`);
                 if (description) params.set('description', description);
                 if (creatorName) params.set('creator_name', creatorName);
                 if (creatorLink) params.set('creator_link', creatorLink);
-                if (thumbnailUrl) params.set('thumbnail_url', thumbnailUrl);
+
+                // Priority for thumbnail:
+                // 1. User-provided thumbnailUrl (Drive link or other URL)
+                // 2. Item with explicit thumbnail field
+                // 3. First YouTube video thumbnail (fallback)
+                let submissionThumbnail = thumbnailUrl;
+
+                if (!submissionThumbnail) {
+                  // Check if any item has an explicit thumbnail
+                  const itemWithThumbnail = items.find(item => item.thumbnail);
+                  if (itemWithThumbnail?.thumbnail) {
+                    submissionThumbnail = itemWithThumbnail.thumbnail;
+                  }
+                }
+
+                if (!submissionThumbnail) {
+                  // Fallback to first YouTube video thumbnail
+                  const firstVideoItem = items.find(item =>
+                    item.type === 'video' && item.video_id && item.video_id.length === 11
+                  );
+                  if (firstVideoItem?.video_id) {
+                    submissionThumbnail = `https://i.ytimg.com/vi/${firstVideoItem.video_id}/mqdefault.jpg`;
+                  }
+                }
+
+                if (submissionThumbnail) params.set('thumbnail_url', submissionThumbnail);
                 if (hashtags.length > 0) params.set('hashtags', hashtags.join(','));
 
                 return (

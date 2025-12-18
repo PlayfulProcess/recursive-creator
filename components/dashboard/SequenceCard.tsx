@@ -14,7 +14,7 @@ interface SequenceItem {
 const AVAILABLE_CHANNELS = [
   { id: 'kids-stories', name: 'Kids Stories', icon: '📚' },
   { id: 'wellness', name: 'Wellness', icon: '🧘' },
-  { id: 'learning', name: 'Learning', icon: '📖' },
+  { id: 'resources', name: 'Resources for Parents', icon: '📖' },
 ];
 
 interface SequenceCardProps {
@@ -30,16 +30,38 @@ interface SequenceCardProps {
   hashtags?: string[];
   creator_name?: string;
   creator_link?: string;
+  submitted_channels?: string[];  // Channel slugs where this is submitted
   onDelete: (id: string) => void;
   onUnsubmit: (id: string) => void;
   onPublish: (id: string) => void;
+  onDuplicate: (id: string) => void;
+}
+
+// Convert Google Drive sharing URLs to direct image URLs
+function convertGoogleDriveUrl(url: string): string {
+  const drivePatterns = [
+    /drive\.google\.com\/file\/d\/([^\/]+)/,
+    /drive\.google\.com\/open\?id=([^&]+)/,
+  ];
+
+  for (const pattern of drivePatterns) {
+    const match = url.match(pattern);
+    if (match && match[1]) {
+      return `https://drive.google.com/uc?export=view&id=${match[1]}`;
+    }
+  }
+
+  return url;
 }
 
 function getProxiedImageUrl(url: string): string {
-  if (url.includes('drive.google.com') || url.includes('googleusercontent.com')) {
-    return `/api/proxy-image?url=${encodeURIComponent(url)}`;
+  // First convert Drive sharing URLs to direct URLs
+  const convertedUrl = convertGoogleDriveUrl(url);
+
+  if (convertedUrl.includes('drive.google.com') || convertedUrl.includes('googleusercontent.com')) {
+    return `/api/proxy-image?url=${encodeURIComponent(convertedUrl)}`;
   }
-  return url;
+  return convertedUrl;
 }
 
 function getThumbnailUrl(props: SequenceCardProps): string | null {
@@ -79,6 +101,8 @@ export default function SequenceCard(props: SequenceCardProps) {
     onDelete,
     onUnsubmit,
     onPublish,
+    onDuplicate,
+    submitted_channels,
   } = props;
 
   const router = useRouter();
@@ -109,6 +133,36 @@ export default function SequenceCard(props: SequenceCardProps) {
     }
   };
 
+  // Get a raw (non-proxied) thumbnail URL for channel submission
+  const getRawThumbnailForSubmission = (): string | null => {
+    if (thumbnail_url) {
+      console.log('Using explicit thumbnail_url:', thumbnail_url);
+      return thumbnail_url;
+    }
+
+    // Fallback to first item's thumbnail
+    if (items && items.length > 0) {
+      console.log('Looking for thumbnail in items:', items.length, 'items');
+
+      const firstImage = items.find(item => item.type === 'image' && item.image_url);
+      if (firstImage?.image_url) {
+        console.log('Using first image:', firstImage.image_url);
+        return firstImage.image_url;
+      }
+
+      const firstVideo = items.find(item => item.type === 'video' && item.video_id);
+      if (firstVideo?.video_id) {
+        // Don't require exact 11 chars - YouTube IDs can vary
+        const ytThumb = `https://img.youtube.com/vi/${firstVideo.video_id}/mqdefault.jpg`;
+        console.log('Using YouTube thumbnail:', ytThumb);
+        return ytThumb;
+      }
+    }
+
+    console.log('No thumbnail found for submission');
+    return null;
+  };
+
   const buildChannelSubmitUrl = (channelId: string) => {
     const params = new URLSearchParams();
     params.set('doc_id', id);
@@ -117,9 +171,18 @@ export default function SequenceCard(props: SequenceCardProps) {
     if (description) params.set('description', description);
     if (creator_name) params.set('creator_name', creator_name);
     if (creator_link) params.set('creator_link', creator_link);
-    if (thumbnail_url) params.set('thumbnail_url', thumbnail_url);
+
+    // Use thumbnail_url or fallback to first item's thumbnail
+    const thumbForSubmission = getRawThumbnailForSubmission();
+    if (thumbForSubmission) params.set('thumbnail_url', thumbForSubmission);
+
     if (hashtags && hashtags.length > 0) params.set('hashtags', hashtags.join(','));
     return `https://channels.recursive.eco/channels/${channelId}?${params.toString()}`;
+  };
+
+  // Get channel display info
+  const getChannelInfo = (slug: string) => {
+    return AVAILABLE_CHANNELS.find(ch => ch.id === slug) || { name: slug, icon: '📁' };
   };
 
   const handleCardClick = () => {
@@ -163,8 +226,21 @@ export default function SequenceCard(props: SequenceCardProps) {
         </span>
 
         {/* Status badge on thumbnail */}
-        <div className="absolute top-2 left-2">
+        <div className="absolute top-2 left-2 flex flex-col gap-1">
           {getStatusBadge()}
+          {/* Channel badges */}
+          {submitted_channels && submitted_channels.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {submitted_channels.map((ch) => {
+                const channelInfo = getChannelInfo(ch);
+                return (
+                  <span key={ch} className="text-xs px-2 py-0.5 rounded bg-blue-600/30 text-blue-300">
+                    {channelInfo.icon} {channelInfo.name}
+                  </span>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Hover overlay */}
@@ -187,6 +263,13 @@ export default function SequenceCard(props: SequenceCardProps) {
         {description && (
           <p className="text-sm text-gray-400 line-clamp-2 mt-1">
             {description}
+          </p>
+        )}
+
+        {/* Creator Name */}
+        {creator_name && (
+          <p className="text-xs text-gray-500 mt-1">
+            by {creator_name}
           </p>
         )}
 
@@ -273,6 +356,29 @@ export default function SequenceCard(props: SequenceCardProps) {
             </button>
           )}
 
+          {/* Duplicate Button */}
+          <button
+            onClick={() => onDuplicate(id)}
+            className="px-3 py-2 text-sm bg-blue-600/20 text-blue-400 rounded hover:bg-blue-600/30 transition-colors"
+            title="Duplicate project"
+          >
+            📋
+          </button>
+
+          {/* Copy URL Button - Only for published */}
+          {is_published && (
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(publicViewUrl);
+                alert('URL copied!');
+              }}
+              className="px-3 py-2 text-sm bg-green-600/20 text-green-400 rounded hover:bg-green-600/30 transition-colors"
+              title="Copy public URL"
+            >
+              🔗
+            </button>
+          )}
+
           {/* Delete Button */}
           <button
             onClick={() => onDelete(id)}
@@ -282,30 +388,6 @@ export default function SequenceCard(props: SequenceCardProps) {
             🗑️
           </button>
         </div>
-
-        {/* Published URL - Compact */}
-        {is_published && (
-          <div className="mt-3 pt-3 border-t border-gray-700">
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={publicViewUrl}
-                readOnly
-                className="flex-1 text-xs px-2 py-1 bg-gray-700 border border-gray-600 rounded font-mono text-gray-300 truncate"
-                onClick={(e) => (e.target as HTMLInputElement).select()}
-              />
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(publicViewUrl);
-                }}
-                className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 whitespace-nowrap"
-                title="Copy link"
-              >
-                Copy
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Click outside to close channel menu */}

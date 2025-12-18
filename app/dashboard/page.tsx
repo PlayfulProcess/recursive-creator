@@ -29,6 +29,7 @@ interface Sequence {
     creator_link?: string;
   };
   created_at: string;
+  submitted_channels?: string[];  // Added: channels where this is submitted
 }
 
 export default function DashboardPage() {
@@ -55,6 +56,7 @@ export default function DashboardPage() {
     if (!user) return;
 
     try {
+      // Fetch user's sequences
       const { data, error } = await supabase
         .from('user_documents')
         .select('*')
@@ -64,7 +66,84 @@ export default function DashboardPage() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setSequences(data || []);
+
+      // Fetch all active channel submissions for user's sequences
+      const { data: toolsData } = await supabase
+        .from('tools')
+        .select('tool_data, channel_id')
+        .eq('tool_data->>is_active', 'true');
+
+      // Create a map of doc_id -> { channels: string[], toolData: any }
+      const toolsMap: Record<string, { channels: string[], toolData: any }> = {};
+      if (toolsData) {
+        for (const tool of toolsData) {
+          const url = tool.tool_data?.url || '';
+          // Extract doc ID from URL like https://recursive.eco/view/{doc_id}
+          const match = url.match(/\/view\/([a-f0-9-]+)/i);
+          if (match) {
+            const docId = match[1];
+            if (!toolsMap[docId]) {
+              toolsMap[docId] = { channels: [], toolData: tool.tool_data };
+            }
+            // Get channel slug from channel_id
+            const channelSlug = tool.channel_id;
+            if (channelSlug && !toolsMap[docId].channels.includes(channelSlug)) {
+              toolsMap[docId].channels.push(channelSlug);
+            }
+            // Keep the most recent tool_data (tools are fetched without order, so just use first found)
+            if (!toolsMap[docId].toolData) {
+              toolsMap[docId].toolData = tool.tool_data;
+            }
+          }
+        }
+      }
+
+      // Merge tools data (priority) with user_documents data (fallback)
+      const sequencesWithChannels = (data || []).map(seq => {
+        const toolsInfo = toolsMap[seq.id];
+        const toolData = toolsInfo?.toolData;
+
+        // Start with user_documents values
+        let title = seq.document_data.title || '';
+        let description = seq.document_data.description || '';
+        let creator_name = seq.document_data.creator_name || seq.document_data.author || '';
+        let creator_link = seq.document_data.creator_link || '';
+        let thumbnail_url = seq.document_data.thumbnail_url || '';
+        let hashtags = seq.document_data.hashtags || [];
+
+        // Override with tools table data if available (channel submission data takes priority)
+        if (toolData) {
+          console.log(`Merging tools data for ${seq.id}:`, toolData);
+          if (toolData.name) title = toolData.name;
+          if (toolData.description) description = toolData.description;
+          if (toolData.submitted_by) creator_name = toolData.submitted_by;
+          if (toolData.creator_link) creator_link = toolData.creator_link;
+          if (toolData.thumbnail) thumbnail_url = toolData.thumbnail;
+          // Note: hashtags are stored as 'category' in tools table
+          const toolsHashtags = toolData.category || toolData.hashtags;
+          if (toolsHashtags) {
+            hashtags = Array.isArray(toolsHashtags)
+              ? toolsHashtags
+              : toolsHashtags.split(',').map((h: string) => h.trim());
+          }
+        }
+
+        return {
+          ...seq,
+          document_data: {
+            ...seq.document_data,
+            title,
+            description,
+            creator_name,
+            creator_link,
+            thumbnail_url,
+            hashtags,
+          },
+          submitted_channels: toolsInfo?.channels || []
+        };
+      });
+
+      setSequences(sequencesWithChannels);
     } catch (err) {
       console.error('Error fetching sequences:', err);
     } finally {
@@ -201,6 +280,53 @@ export default function DashboardPage() {
     }
   };
 
+  const handleDuplicateSequence = async (sequenceId: string) => {
+    try {
+      // Fetch the original sequence
+      const { data: original, error: fetchError } = await supabase
+        .from('user_documents')
+        .select('*')
+        .eq('id', sequenceId)
+        .eq('user_id', user!.id)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Create new slug with timestamp
+      const baseSlug = (original.document_data.title || 'untitled')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+      const timestamp = Date.now();
+      const newSlug = `${baseSlug}-copy-${timestamp}`;
+
+      // Insert duplicate (unpublished)
+      const { error: insertError } = await supabase
+        .from('user_documents')
+        .insert({
+          user_id: user!.id,
+          document_type: original.document_type,
+          tool_slug: original.tool_slug,
+          story_slug: newSlug,
+          is_public: false,
+          document_data: {
+            ...original.document_data,
+            title: `${original.document_data.title || 'Untitled'} (Copy)`,
+            is_published: 'false',
+            published_at: null
+          }
+        });
+
+      if (insertError) throw insertError;
+
+      alert('Project duplicated! The copy is saved as a draft.');
+      fetchSequences();
+    } catch (err) {
+      console.error('Error duplicating sequence:', err);
+      alert('Failed to duplicate project. Please try again.');
+    }
+  };
+
   if (status === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-900">
@@ -269,9 +395,11 @@ export default function DashboardPage() {
                 hashtags={sequence.document_data.hashtags}
                 creator_name={sequence.document_data.creator_name}
                 creator_link={sequence.document_data.creator_link}
+                submitted_channels={sequence.submitted_channels}
                 onDelete={handleDeleteSequence}
                 onUnsubmit={handleUnsubmitFromChannels}
                 onPublish={handlePublishSequence}
+                onDuplicate={handleDuplicateSequence}
               />
             ))}
           </div>
