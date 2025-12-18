@@ -266,6 +266,13 @@ export default function SequenceCard(props: SequenceCardProps) {
           </p>
         )}
 
+        {/* Creator Name */}
+        {creator_name && (
+          <p className="text-xs text-gray-500 mt-1">
+            by {creator_name}
+          </p>
+        )}
+
         {/* Hashtags */}
         {hashtags && hashtags.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-2">
