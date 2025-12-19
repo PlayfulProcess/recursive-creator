@@ -56,7 +56,7 @@ export default function DashboardPage() {
     if (!user) return;
 
     try {
-      // Fetch user's sequences
+      // Fetch user's sequences from user_documents (single source of truth)
       const { data, error } = await supabase
         .from('user_documents')
         .select('*')
@@ -67,83 +67,24 @@ export default function DashboardPage() {
 
       if (error) throw error;
 
-      // Fetch all active channel submissions for user's sequences
-      const { data: toolsData } = await supabase
-        .from('tools')
-        .select('tool_data, channel_id')
-        .eq('tool_data->>is_active', 'true');
+      // Map directly from user_documents - no tools table merging needed
+      // (channels app will update user_documents when submissions change)
+      const sequences = (data || []).map(seq => ({
+        ...seq,
+        document_data: {
+          ...seq.document_data,
+          // Ensure all fields have defaults
+          title: seq.document_data.title || '',
+          description: seq.document_data.description || '',
+          creator_name: seq.document_data.creator_name || seq.document_data.author || '',
+          creator_link: seq.document_data.creator_link || '',
+          thumbnail_url: seq.document_data.thumbnail_url || '',
+          hashtags: seq.document_data.hashtags || [],
+        },
+        submitted_channels: [] // No longer tracking this from tools table
+      }));
 
-      // Create a map of doc_id -> { channels: string[], toolData: any }
-      const toolsMap: Record<string, { channels: string[], toolData: any }> = {};
-      if (toolsData) {
-        for (const tool of toolsData) {
-          const url = tool.tool_data?.url || '';
-          // Extract doc ID from URL like https://recursive.eco/view/{doc_id}
-          const match = url.match(/\/view\/([a-f0-9-]+)/i);
-          if (match) {
-            const docId = match[1];
-            if (!toolsMap[docId]) {
-              toolsMap[docId] = { channels: [], toolData: tool.tool_data };
-            }
-            // Get channel slug from channel_id
-            const channelSlug = tool.channel_id;
-            if (channelSlug && !toolsMap[docId].channels.includes(channelSlug)) {
-              toolsMap[docId].channels.push(channelSlug);
-            }
-            // Keep the most recent tool_data (tools are fetched without order, so just use first found)
-            if (!toolsMap[docId].toolData) {
-              toolsMap[docId].toolData = tool.tool_data;
-            }
-          }
-        }
-      }
-
-      // Merge tools data (priority) with user_documents data (fallback)
-      const sequencesWithChannels = (data || []).map(seq => {
-        const toolsInfo = toolsMap[seq.id];
-        const toolData = toolsInfo?.toolData;
-
-        // Start with user_documents values
-        let title = seq.document_data.title || '';
-        let description = seq.document_data.description || '';
-        let creator_name = seq.document_data.creator_name || seq.document_data.author || '';
-        let creator_link = seq.document_data.creator_link || '';
-        let thumbnail_url = seq.document_data.thumbnail_url || '';
-        let hashtags = seq.document_data.hashtags || [];
-
-        // Override with tools table data if available (channel submission data takes priority)
-        if (toolData) {
-          console.log(`Merging tools data for ${seq.id}:`, toolData);
-          if (toolData.name) title = toolData.name;
-          if (toolData.description) description = toolData.description;
-          if (toolData.submitted_by) creator_name = toolData.submitted_by;
-          if (toolData.creator_link) creator_link = toolData.creator_link;
-          if (toolData.thumbnail) thumbnail_url = toolData.thumbnail;
-          // Note: hashtags are stored as 'category' in tools table
-          const toolsHashtags = toolData.category || toolData.hashtags;
-          if (toolsHashtags) {
-            hashtags = Array.isArray(toolsHashtags)
-              ? toolsHashtags
-              : toolsHashtags.split(',').map((h: string) => h.trim());
-          }
-        }
-
-        return {
-          ...seq,
-          document_data: {
-            ...seq.document_data,
-            title,
-            description,
-            creator_name,
-            creator_link,
-            thumbnail_url,
-            hashtags,
-          },
-          submitted_channels: toolsInfo?.channels || []
-        };
-      });
-
-      setSequences(sequencesWithChannels);
+      setSequences(sequences);
     } catch (err) {
       console.error('Error fetching sequences:', err);
     } finally {
