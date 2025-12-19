@@ -175,6 +175,8 @@ function NewSequencePageContent() {
   const searchParams = useSearchParams();
   const supabase = createClient();
   const itemsContainerRef = useRef<HTMLDivElement>(null);
+  // Ref for immediate access to published doc ID (avoids React state timing issues)
+  const publishedDocIdRef = useRef<string | null>(null);
 
   const editingId = searchParams.get('id');
 
@@ -343,6 +345,7 @@ function NewSequencePageContent() {
   const loadSequence = async (id: string) => {
     setLoading(true);
     try {
+      // Fetch from user_documents (single source of truth)
       const { data, error } = await supabase
         .from('user_documents')
         .select('*')
@@ -352,61 +355,19 @@ function NewSequencePageContent() {
 
       if (error) throw error;
 
-      // Load channel fields - check tools table FIRST (most recent), then fall back to user_documents
-      let titleValue = data.document_data.title || '';
-      let descriptionValue = data.document_data.description || '';
-      let creatorNameValue = '';
-      let creatorLinkValue = '';
-      let thumbnailUrlValue = '';
-      let hashtagsValue: string[] = [];
+      // Load all fields directly from user_documents.document_data
+      const docData = data.document_data;
+      const titleValue = docData.title || '';
+      const descriptionValue = docData.description || '';
+      const creatorNameValue = docData.creator_name || docData.author || '';
+      const creatorLinkValue = docData.creator_link || '';
+      const thumbnailUrlValue = docData.thumbnail_url || '';
+      const hashtagsValue = docData.hashtags || [];
 
-      // Step 1: Try to get from tools table (channel submissions have most recent data)
-      const { data: toolsData } = await supabase
-        .from('tools')
-        .select('tool_data')
-        .ilike('tool_data->>url', `%${id}%`)
-        .eq('tool_data->>is_active', 'true')
-        .limit(1)
-        .single();
-
-      if (toolsData?.tool_data) {
-        console.log('Found channel submission data (priority):', toolsData.tool_data);
-        // Pull ALL fields from tools table (these take priority over user_documents)
-        if (toolsData.tool_data.name) titleValue = toolsData.tool_data.name;
-        if (toolsData.tool_data.description) descriptionValue = toolsData.tool_data.description;
-        creatorNameValue = toolsData.tool_data.submitted_by || '';
-        creatorLinkValue = toolsData.tool_data.creator_link || '';
-        thumbnailUrlValue = toolsData.tool_data.thumbnail || '';
-        // Note: hashtags are stored as 'category' in tools table (from SubmitToolModal)
-        const toolsHashtags = toolsData.tool_data.category || toolsData.tool_data.hashtags;
-        if (toolsHashtags) {
-          hashtagsValue = Array.isArray(toolsHashtags)
-            ? toolsHashtags
-            : toolsHashtags.split(',').map((h: string) => h.trim());
-        }
-      }
-
-      // Step 2: Fall back to user_documents for any missing fields
-      if (!creatorNameValue) {
-        creatorNameValue = data.document_data.creator_name || data.document_data.author || '';
-      }
-      if (!creatorLinkValue) {
-        creatorLinkValue = data.document_data.creator_link || '';
-      }
-      if (!thumbnailUrlValue) {
-        thumbnailUrlValue = data.document_data.thumbnail_url || '';
-      }
-      if (!hashtagsValue.length) {
-        hashtagsValue = data.document_data.hashtags || [];
-      }
-
-      console.log('Final channel fields (tools → user_documents fallback):', {
+      console.log('Loaded project data from user_documents:', {
+        id,
         title: titleValue,
-        description: descriptionValue,
         creator_name: creatorNameValue,
-        creator_link: creatorLinkValue,
-        thumbnail_url: thumbnailUrlValue,
-        hashtags: hashtagsValue
       });
 
       // Set all state
@@ -418,20 +379,22 @@ function NewSequencePageContent() {
       setHashtags(hashtagsValue);
 
       // Check if published (from document_data.is_published)
-      const isPublishedValue = data.document_data.is_published === 'true';
+      const isPublishedValue = docData.is_published === 'true';
       setIsPublished(isPublishedValue);
 
       // Check if reported (blocks re-publishing)
       const isReportedValue = data.reported === true;
       setIsReported(isReportedValue);
 
-      // Set published URL and doc ID if published
+      // Set published URL and doc ID if published (both state and ref)
       if (isPublishedValue) {
-        setPublishedUrl(`https://recursive.eco/view/${id}`);
+        publishedDocIdRef.current = id;
         setPublishedDocId(id);
+        setPublishedUrl(`https://recursive.eco/view/${id}`);
       } else {
-        setPublishedUrl(null);
+        publishedDocIdRef.current = null;
         setPublishedDocId(null);
+        setPublishedUrl(null);
       }
 
       if (data.document_data.items && data.document_data.items.length > 0) {
@@ -1006,9 +969,14 @@ function NewSequencePageContent() {
         }
 
         if (shouldPublish) {
+          // Set both state and ref for immediate access
+          publishedDocIdRef.current = editingId;
+          setPublishedDocId(editingId);
           setPublishedUrl(`https://recursive.eco/view/${editingId}`);
           setIsPublished(true);
         } else {
+          publishedDocIdRef.current = null;
+          setPublishedDocId(null);
           setPublishedUrl(null);
           setIsPublished(false);
         }
@@ -1026,6 +994,8 @@ function NewSequencePageContent() {
         const baseSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
         const timestamp = Date.now();
         const slug = `${baseSlug}-${timestamp}`;
+
+        console.log('CREATE MODE: Inserting new project with slug:', slug);
 
         const { data: insertData, error: insertError } = await supabase
           .from('user_documents')
@@ -1053,11 +1023,19 @@ function NewSequencePageContent() {
           .select()
           .single();
 
-        if (insertError) throw insertError;
+        console.log('Insert result:', { insertData, insertError });
+
+        if (insertError) {
+          console.error('Insert error:', insertError);
+          throw insertError;
+        }
 
         if (!insertData || !insertData.id) {
+          console.error('No data returned from insert');
           throw new Error('Failed to create project: No ID returned');
         }
+
+        console.log('Project created successfully with ID:', insertData.id);
 
         // Send emails if published
         if (shouldPublish) {
@@ -1079,10 +1057,14 @@ function NewSequencePageContent() {
             console.error('Failed to send publish notification:', err);
           }
 
-          setPublishedUrl(`https://recursive.eco/view/${insertData.id}`);
+          // Set both state and ref for immediate access
+          publishedDocIdRef.current = insertData.id;
           setPublishedDocId(insertData.id);
+          setPublishedUrl(`https://recursive.eco/view/${insertData.id}`);
           setIsPublished(true);
         } else {
+          publishedDocIdRef.current = null;
+          setPublishedDocId(null);
           setIsPublished(false);
         }
 
@@ -1136,6 +1118,8 @@ function NewSequencePageContent() {
       const timestamp = Date.now();
       const slug = `${baseSlug}-${timestamp}`;
 
+      console.log('SAVE AS NEW: Creating new project with slug:', slug);
+
       const { data: insertData, error: insertError } = await supabase
         .from('user_documents')
         .insert({
@@ -1147,7 +1131,7 @@ function NewSequencePageContent() {
           document_data: {
             title: title.trim(),
             description: description.trim(),
-            is_published: 'false',  // Fixed: was 'is_active'
+            is_published: 'false',
             reviewed: 'false',
             creator_id: user.id,
             items: validItems,
@@ -1161,7 +1145,19 @@ function NewSequencePageContent() {
         .select()
         .single();
 
-      if (insertError) throw insertError;
+      console.log('Save As New result:', { insertData, insertError });
+
+      if (insertError) {
+        console.error('Save As New error:', insertError);
+        throw insertError;
+      }
+
+      if (!insertData || !insertData.id) {
+        console.error('No data returned from Save As New insert');
+        throw new Error('Failed to create new project: No ID returned');
+      }
+
+      console.log('New project created with ID:', insertData.id);
 
       setSuccess(true);
       setHasUnsavedChanges(false);
@@ -1347,7 +1343,7 @@ function NewSequencePageContent() {
                         <input
                           type="text"
                           value={hashtagInput}
-                          onChange={(e) => setHashtagInput(e.target.value.replace(/[^a-zA-Z0-9]/g, ''))}
+                          onChange={(e) => setHashtagInput(e.target.value.replace(/[^a-zA-Z0-9+_-]/g, ''))}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' && hashtagInput.trim() && hashtags.length < 5) {
                               e.preventDefault();
@@ -2021,13 +2017,16 @@ function NewSequencePageContent() {
 
             <div className="space-y-3">
               {AVAILABLE_CHANNELS.map((channel) => {
+                // Use ref for immediate access (avoids React state timing issues)
+                const docId = publishedDocIdRef.current || publishedDocId || '';
+
                 // Build URL with all submission fields
                 const params = new URLSearchParams();
-                params.set('doc_id', publishedDocId || '');
+                params.set('doc_id', docId);
                 params.set('channel', channel.id);
                 params.set('title', title);
                 // Include full URL for the content
-                params.set('url', `https://recursive.eco/view/${publishedDocId}`);
+                params.set('url', `https://recursive.eco/view/${docId}`);
                 if (description) params.set('description', description);
                 if (creatorName) params.set('creator_name', creatorName);
                 if (creatorLink) params.set('creator_link', creatorLink);
