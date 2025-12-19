@@ -1343,7 +1343,7 @@ function NewSequencePageContent() {
                         <input
                           type="text"
                           value={hashtagInput}
-                          onChange={(e) => setHashtagInput(e.target.value.replace(/[^a-zA-Z0-9]/g, ''))}
+                          onChange={(e) => setHashtagInput(e.target.value.replace(/[^a-zA-Z0-9+_-]/g, ''))}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' && hashtagInput.trim() && hashtags.length < 5) {
                               e.preventDefault();
